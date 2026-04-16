@@ -1,0 +1,156 @@
+use mlua::prelude::*;
+use serde_json::Value;
+use std::cell::RefCell;
+use std::collections::VecDeque;
+use std::rc::Rc;
+
+struct FetchOptions {
+    url: String,
+    method: reqwest::Method,
+}
+
+pub struct LibContext {
+    pub process_list: VecDeque<std::process::Child>,
+}
+
+pub fn exec_bg(ctx: Rc<RefCell<LibContext>>) -> impl Fn(&Lua, String) -> LuaResult<()> {
+    move |_lua, command| {
+        eprintln!("Executing command: {}", command);
+
+        ctx.borrow_mut().process_list.push_back(
+            std::process::Command::new("sh")
+                .arg("-c")
+                .arg(command)
+                .spawn()
+                .unwrap(),
+        );
+
+        LuaResult::Ok(())
+    }
+}
+
+pub fn test(ctx: Rc<RefCell<LibContext>>) -> impl Fn(&Lua, (String, LuaFunction)) -> LuaResult<()> {
+    move |_lua, (test_name, func)| {
+        if let Err(err) = func.call::<()>(Some(123)) {
+            println!(
+                "❌ {}\n{}",
+                test_name,
+                match err.clone() {
+                    LuaError::CallbackError {
+                        cause,
+                        traceback: _,
+                    } =>
+                        if let LuaError::RuntimeError(err) = cause.clone().as_ref() {
+                            err.to_owned()
+                        } else {
+                            err.to_string()
+                        },
+                    _ => err.to_string(),
+                },
+            );
+        } else {
+            println!("✅ {}", test_name);
+        }
+
+        while let Some(mut process) = ctx.clone().borrow_mut().process_list.pop_back() {
+            eprintln!("Terminating {}...", process.id());
+            process.kill().expect("Failed to kill process.");
+        }
+
+        Ok(())
+    }
+}
+
+pub fn fetch(_ctx: Rc<RefCell<LibContext>>) -> impl Fn(&Lua, LuaValue) -> LuaResult<LuaTable> {
+    move |lua, value| {
+        eprintln!("Let's make a request...");
+
+        let options = serde_json::to_value(value)
+            .unwrap()
+            .as_object()
+            .ok_or(LuaError::RuntimeError("Invalid fetch options.".to_string()))?
+            .clone();
+
+        let fetch_options = FetchOptions {
+            url: options
+                .get("url")
+                .ok_or(LuaError::RuntimeError("Missing URL".to_string()))?
+                .as_str()
+                .ok_or(LuaError::RuntimeError(
+                    "Wrong format for URL field".to_string(),
+                ))?
+                .to_string(),
+            method: reqwest::Method::try_from(
+                options
+                    .get("method")
+                    .unwrap_or(&Value::String("get".to_string()))
+                    .as_str()
+                    .ok_or(LuaError::RuntimeError(
+                        "Failed to decode method".to_string(),
+                    ))?
+                    .to_uppercase()
+                    .as_str(),
+            )
+            .unwrap(),
+        };
+
+        let request = reqwest::blocking::Request::new(
+            fetch_options.method,
+            url::Url::parse(&fetch_options.url).unwrap(),
+        );
+        let response = reqwest::blocking::Client::new().execute(request).unwrap();
+
+        let lua_response = lua.create_table()?;
+        lua_response.set("status", response.status().as_u16())?;
+        lua_response.set("headers", {
+            let headers = lua.create_table().unwrap();
+            for (key, value) in response.headers().iter() {
+                headers
+                    .set(key.as_str().to_string(), value.to_str().unwrap())
+                    .unwrap();
+            }
+
+            headers
+        })?;
+
+        let response_body = response.text().unwrap_or_default();
+
+        lua_response.set("body", response_body.clone())?;
+        lua_response.set(
+            "json",
+            lua.to_value(match &serde_json::from_str::<Value>(&response_body).ok() {
+                Some(json) => json,
+                _ => &Value::Null,
+            })
+            .unwrap(),
+        )?;
+
+        Ok(lua_response)
+    }
+}
+
+pub fn expect_equal(
+    _ctx: Rc<RefCell<LibContext>>,
+) -> impl Fn(&Lua, LuaMultiValue) -> LuaResult<()> {
+    move |_lua, values| {
+        if values.len() != 2 {
+            return Err(LuaError::BindError);
+        }
+
+        let values = values
+            .iter()
+            .map(|value| serde_json::to_value(value).unwrap())
+            .collect::<Vec<Value>>();
+
+        let [a, b]: [Value; 2] = values.try_into().unwrap();
+
+        if !a.eq(&b) {
+            return Err(LuaError::RuntimeError(format!(
+                "Not equal!\nLeft:  {}\nRight: {}",
+                a, b,
+            )));
+        }
+
+        Ok(())
+    }
+}
