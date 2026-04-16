@@ -4,7 +4,7 @@
 END EXPECTED OUTPUT --]]
 
 local mock_server = [[
-/home/work/work/mock/bin/mock serve -p 4000 \
+mock serve -p 4000 \
     --route test --status-code 205 --header 'foo: bar' --response 'Hello, world!' \
     --route test-post --method post --response 'This is the POST endpoint.' \
     >&2
