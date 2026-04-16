@@ -31,6 +31,9 @@ test("POST request", function()
     local response = serve_mock_and_request({
         url = "http://localhost:4000/test-post",
         method = "post",
+        body: to_json({
+            foo = "bar",
+        }),
     })
 
     expect_equal(response.body, "This is the POST endpoint.")
