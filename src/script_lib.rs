@@ -17,13 +17,9 @@ pub fn exec_bg(ctx: Rc<RefCell<LibContext>>) -> impl Fn(&Lua, String) -> LuaResu
     move |_lua, command| {
         eprintln!("Executing command: {}", command);
 
-        ctx.borrow_mut().process_list.push_back(
-            std::process::Command::new("sh")
-                .arg("-c")
-                .arg(command)
-                .spawn()
-                .unwrap(),
-        );
+        ctx.borrow_mut()
+            .process_list
+            .push_back(crate::common::spawn_background_process(&command).unwrap());
 
         LuaResult::Ok(())
     }
