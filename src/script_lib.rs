@@ -52,10 +52,7 @@ pub fn test(ctx: Rc<RefCell<LibContext>>) -> impl Fn(&Lua, (String, LuaFunction)
             println!("✅ {}", test_name);
         }
 
-        while let Some(mut process) = ctx.clone().borrow_mut().process_list.pop_back() {
-            eprintln!("Terminating {}...", process.id());
-            process.kill().expect("Failed to kill process.");
-        }
+        crate::common::kill_processes(&mut ctx.clone().borrow_mut().process_list);
 
         Ok(())
     }

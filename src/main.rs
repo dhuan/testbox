@@ -34,4 +34,6 @@ fn main() {
             .exec()
             .unwrap();
     }
+
+    crate::common::kill_processes(&mut ctx.clone().borrow_mut().process_list);
 }
