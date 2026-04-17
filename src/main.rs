@@ -42,9 +42,13 @@ fn main() {
     add_func(&lua, "json_encode", json_encode(ctx.clone()));
 
     for test_file in files {
-        lua.load(std::fs::read_to_string(test_file).unwrap())
-            .exec()
-            .unwrap();
+        let script = if test_file == "-" {
+            stdin().expect("Failed to read stdin.")
+        } else {
+            std::fs::read_to_string(test_file).unwrap()
+        };
+
+        lua.load(script).exec().unwrap();
     }
 
     crate::common::kill_processes(&mut ctx.clone().borrow_mut().process_list);

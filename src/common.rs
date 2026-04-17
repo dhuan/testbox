@@ -1,5 +1,6 @@
 use mlua::prelude::*;
 use std::collections::VecDeque;
+use std::io::Read;
 use std::os::unix::process::CommandExt;
 use std::process::{Child, Command};
 
@@ -12,6 +13,14 @@ where
     lua.globals()
         .set(func_name, lua.create_function_mut(func).unwrap())
         .unwrap();
+}
+
+pub fn stdin() -> Option<String> {
+    let mut stdin_buffer = String::new();
+
+    std::io::stdin().read_to_string(&mut stdin_buffer).ok()?;
+
+    Some(stdin_buffer)
 }
 
 pub fn spawn_background_process(command: &str) -> std::io::Result<Child> {
