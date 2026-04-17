@@ -28,6 +28,7 @@ fn main() {
     add_func(&lua, "exec_bg", exec_bg(ctx.clone()));
     add_func(&lua, "fetch", fetch(ctx.clone()));
     add_func(&lua, "test", test(ctx.clone()));
+    add_func(&lua, "json_encode", json_encode(ctx.clone()));
 
     for test_file in test_files {
         lua.load(std::fs::read_to_string(test_file).unwrap())

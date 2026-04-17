@@ -1,4 +1,4 @@
-use mlua::prelude::*;
+use mlua::prelude::{LuaSerdeExt, *};
 use serde_json::Value;
 use std::cell::RefCell;
 use std::collections::VecDeque;
@@ -145,5 +145,13 @@ pub fn expect_equal(
         }
 
         Ok(())
+    }
+}
+
+pub fn json_encode(_ctx: Rc<RefCell<LibContext>>) -> impl Fn(&Lua, LuaTable) -> LuaResult<String> {
+    move |lua, value| {
+        let json_value: serde_json::Value = lua.from_value(LuaValue::Table(value))?;
+
+        Ok(serde_json::to_string(&json_value).unwrap())
     }
 }
