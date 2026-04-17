@@ -155,3 +155,11 @@ pub fn json_encode(_ctx: Rc<RefCell<LibContext>>) -> impl Fn(&Lua, LuaTable) -> 
         Ok(serde_json::to_string(&json_value).unwrap())
     }
 }
+
+pub fn json_decode(_ctx: Rc<RefCell<LibContext>>) -> impl Fn(&Lua, String) -> LuaResult<LuaValue> {
+    move |lua, value| {
+        let json_decoded: serde_json::Value = serde_json::from_str(&value).unwrap();
+
+        Ok(lua.to_value(&json_decoded)?)
+    }
+}

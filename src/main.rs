@@ -40,6 +40,7 @@ fn main() {
     add_func(&lua, "fetch", fetch(ctx.clone()));
     add_func(&lua, "test", test(ctx.clone()));
     add_func(&lua, "json_encode", json_encode(ctx.clone()));
+    add_func(&lua, "json_decode", json_decode(ctx.clone()));
 
     for test_file in files {
         let script = if test_file == "-" {
