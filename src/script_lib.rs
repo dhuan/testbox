@@ -148,7 +148,7 @@ pub fn expect_equal(
     }
 }
 
-pub fn to_json(_ctx: Rc<RefCell<LibContext>>) -> impl Fn(&Lua, LuaTable) -> LuaResult<String> {
+pub fn json_encode(_ctx: Rc<RefCell<LibContext>>) -> impl Fn(&Lua, LuaTable) -> LuaResult<String> {
     move |lua, value| {
         let json_value: serde_json::Value = lua.from_value(LuaValue::Table(value))?;
 
