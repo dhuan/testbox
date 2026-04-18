@@ -1,4 +1,5 @@
 use mlua::prelude::{LuaSerdeExt, *};
+use reqwest::header::HeaderMap;
 use serde_json::Value;
 use std::cell::RefCell;
 use std::collections::VecDeque;
@@ -8,6 +9,7 @@ struct FetchOptions {
     url: String,
     method: reqwest::Method,
     body: Option<String>,
+    headers: Option<reqwest::header::HeaderMap>,
 }
 
 pub struct LibContext {
@@ -95,6 +97,28 @@ pub fn fetch(_ctx: Rc<RefCell<LibContext>>) -> impl Fn(&Lua, LuaValue) -> LuaRes
             } else {
                 None
             },
+            headers: if let Some(headers) = options.get("headers") {
+                if let Some(headers) = headers.as_object() {
+                    let mut hm = HeaderMap::new();
+                    for (key, value) in headers {
+                        let value = value.as_str();
+                        if value.is_none() {
+                            continue;
+                        }
+
+                        hm.insert(
+                            reqwest::header::HeaderName::from_bytes(key.as_bytes()).unwrap(),
+                            reqwest::header::HeaderValue::from_str(value.unwrap()).unwrap(),
+                        );
+                    }
+
+                    Some(hm)
+                } else {
+                    None
+                }
+            } else {
+                None
+            },
         };
 
         let mut request = reqwest::blocking::Request::new(
@@ -105,6 +129,10 @@ pub fn fetch(_ctx: Rc<RefCell<LibContext>>) -> impl Fn(&Lua, LuaValue) -> LuaRes
         if let Some(body) = fetch_options.body {
             let body_set = request.body_mut();
             *body_set = Some(reqwest::blocking::Body::from(body));
+        }
+
+        if let Some(headers) = fetch_options.headers {
+            *request.headers_mut() = headers;
         }
 
         let response = reqwest::blocking::Client::new().execute(request).unwrap();

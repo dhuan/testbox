@@ -6,7 +6,10 @@ END EXPECTED OUTPUT --]]
 local mock_server = [[
 mock serve -p 4000 \
     --route test --status-code 205 --header 'foo: bar' --response 'Hello, world!' \
-    --route test-post --method post --exec 'printf "This is the POST endpoint.\nRequest payload: %s" "$(mock get-payload)" | mock write' \
+    --route test-post --method post --exec 'printf "This is the POST endpoint.
+Request payload: %s
+Request header some-header-key: %s
+" "$(mock get-payload)" "$(mock get-header -v some-header-key)" | mock write' \
     >&2
 ]]
 
@@ -31,11 +34,16 @@ test("POST request", function()
     local response = serve_mock_and_request({
         url = "http://localhost:4000/test-post",
         method = "post",
+        headers = {
+            ["some-header-key"] = "some header value",
+        },
         body = json_encode({
             foo = "bar",
         }),
     })
 
     expect_equal(response.body, [[This is the POST endpoint.
-Request payload: {"foo":"bar"}]])
+Request payload: {"foo":"bar"}
+Request header some-header-key: some header value
+]])
 end)
