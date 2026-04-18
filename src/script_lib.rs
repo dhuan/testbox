@@ -7,6 +7,7 @@ use std::rc::Rc;
 struct FetchOptions {
     url: String,
     method: reqwest::Method,
+    body: Option<String>,
 }
 
 pub struct LibContext {
@@ -85,12 +86,27 @@ pub fn fetch(_ctx: Rc<RefCell<LibContext>>) -> impl Fn(&Lua, LuaValue) -> LuaRes
                     .as_str(),
             )
             .unwrap(),
+            body: if let Some(body) = options.get("body") {
+                Some(
+                    body.as_str()
+                        .ok_or(LuaError::RuntimeError("Body must be string".to_string()))?
+                        .to_string(),
+                )
+            } else {
+                None
+            },
         };
 
-        let request = reqwest::blocking::Request::new(
+        let mut request = reqwest::blocking::Request::new(
             fetch_options.method,
             url::Url::parse(&fetch_options.url).unwrap(),
         );
+
+        if let Some(body) = fetch_options.body {
+            let body_set = request.body_mut();
+            *body_set = Some(reqwest::blocking::Body::from(body));
+        }
+
         let response = reqwest::blocking::Client::new().execute(request).unwrap();
 
         let lua_response = lua.create_table()?;
