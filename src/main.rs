@@ -15,6 +15,8 @@ fn main() {
         .version(env!("CARGO_PKG_VERSION"))
         .about("Test runner with Lua scripts.")
         .arg(Arg::new("files").action(ArgAction::Append))
+        .arg(Arg::new("test-filter").short('t'))
+        .arg(Arg::new("test-filter-exact").short('T'))
         .get_matches();
 
     let files = matches
@@ -22,6 +24,14 @@ fn main() {
         .unwrap_or_default()
         .map(|v| v.as_str())
         .collect::<Vec<_>>();
+
+    let test_filter = if let Some(value) = matches.get_one::<String>("test-filter") {
+        Some(FilterMode::Regex(value.to_owned()))
+    } else if let Some(value) = matches.get_one::<String>("test-filter-exact") {
+        Some(FilterMode::Exact(value.to_owned()))
+    } else {
+        None
+    };
 
     if files.len() == 0 {
         eprintln!("No files were given.");
@@ -33,6 +43,7 @@ fn main() {
 
     let ctx = Rc::new(RefCell::new(LibContext {
         process_list: VecDeque::new(),
+        test_filter,
     }));
 
     add_func(&lua, "expect_equal", expect_equal(ctx.clone()));

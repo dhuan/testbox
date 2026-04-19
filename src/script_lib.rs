@@ -12,8 +12,14 @@ struct FetchOptions {
     headers: Option<reqwest::header::HeaderMap>,
 }
 
+pub enum FilterMode {
+    Regex(String),
+    Exact(String),
+}
+
 pub struct LibContext {
     pub process_list: VecDeque<std::process::Child>,
+    pub test_filter: Option<FilterMode>,
 }
 
 pub fn exec_bg(ctx: Rc<RefCell<LibContext>>) -> impl Fn(&Lua, String) -> LuaResult<()> {
@@ -28,8 +34,27 @@ pub fn exec_bg(ctx: Rc<RefCell<LibContext>>) -> impl Fn(&Lua, String) -> LuaResu
     }
 }
 
+fn test_match(filter: &FilterMode, test_name: &str) -> bool {
+    match filter {
+        FilterMode::Exact(value) => value.to_lowercase() == test_name.to_lowercase(),
+        FilterMode::Regex(value) => {
+            if let Ok(r) = regex::Regex::new(&value) {
+                r.is_match(test_name)
+            } else {
+                false
+            }
+        }
+    }
+}
+
 pub fn test(ctx: Rc<RefCell<LibContext>>) -> impl Fn(&Lua, (String, LuaFunction)) -> LuaResult<()> {
     move |_lua, (test_name, func)| {
+        if let Some(test_filter) = &ctx.clone().borrow().test_filter {
+            if !test_match(&test_filter, &test_name) {
+                return Ok(());
+            }
+        }
+
         if let Err(err) = func.call::<()>(Some(123)) {
             println!(
                 "❌ {}\n{}",
