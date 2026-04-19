@@ -25,7 +25,9 @@ do
 
     TEST_OPTIONS="$(cat "${TEST_FILE}" | extract_test_options)"
 
-    OUTPUT=$(./target/debug/testbox $TEST_OPTIONS "${TEST_FILE}" 2> "${OUTPUT_STDERR}")
+    COMMAND="./target/debug/testbox $TEST_OPTIONS "${TEST_FILE}""
+
+    OUTPUT=$(eval $COMMAND 2> "${OUTPUT_STDERR}")
 
     EXPECTED_OUTPUT=$(cat "${TEST_FILE}" | extract_expected_output)
 
