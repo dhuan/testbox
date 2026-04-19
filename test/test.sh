@@ -7,13 +7,25 @@ BEGIN { PRINT = 0 }
     '
 }
 
+extract_test_options () {
+    awk '
+/^-- OPTIONS:/ {
+    sub(/-- OPTIONS: /, "", $0)
+
+    print;
+}
+'
+}
+
 OUTPUT_STDERR=$(mktemp)
 
 ls test/*.lua | while read TEST_FILE
 do
     echo $TEST_FILE
 
-    OUTPUT=$(./target/debug/testbox "${TEST_FILE}" 2> "${OUTPUT_STDERR}")
+    TEST_OPTIONS="$(cat "${TEST_FILE}" | extract_test_options)"
+
+    OUTPUT=$(./target/debug/testbox $TEST_OPTIONS "${TEST_FILE}" 2> "${OUTPUT_STDERR}")
 
     EXPECTED_OUTPUT=$(cat "${TEST_FILE}" | extract_expected_output)
 
