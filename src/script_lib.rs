@@ -34,6 +34,54 @@ pub fn exec_bg(ctx: Rc<RefCell<LibContext>>) -> impl Fn(&Lua, String) -> LuaResu
     }
 }
 
+struct ExecResult {
+    output: Option<String>,
+    error: Option<String>,
+    status: Option<i32>,
+}
+
+pub fn exec(_ctx: Rc<RefCell<LibContext>>) -> impl Fn(&Lua, String) -> LuaResult<LuaTable> {
+    move |lua, command| {
+        eprintln!("Executing command: {}", command);
+
+        let result = match std::process::Command::new("sh")
+            .arg("-c")
+            .arg(command)
+            .output()
+        {
+            Err(err) => ExecResult {
+                output: Some("".to_string()),
+                error: Some(err.to_string()),
+                status: None,
+            },
+            Ok(result) => ExecResult {
+                output: Some(
+                    String::from_utf8(result.stdout)
+                        .unwrap_or_default()
+                        .trim_end()
+                        .to_string(),
+                ),
+                error: None,
+                status: result.status.code(),
+            },
+        };
+
+        let result_lua = lua.create_table().unwrap();
+        result_lua
+            .set("output", result.output.unwrap_or_default())
+            .unwrap();
+        result_lua
+            .set(
+                "error",
+                result.error.map(|err| lua.create_string(err).unwrap()),
+            )
+            .unwrap();
+        result_lua.set("status", result.status).unwrap();
+
+        LuaResult::Ok(result_lua)
+    }
+}
+
 fn test_match(filter: &FilterMode, test_name: &str) -> bool {
     match filter {
         FilterMode::Exact(value) => value.to_lowercase() == test_name.to_lowercase(),
