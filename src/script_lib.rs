@@ -4,6 +4,7 @@ use serde_json::Value;
 use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::rc::Rc;
+use std::{io::prelude::*, sync::mpsc, time::Duration};
 
 struct FetchOptions {
     url: String,
@@ -22,20 +23,200 @@ pub struct LibContext {
     pub test_filter: Option<FilterMode>,
 }
 
-pub fn exec_bg(ctx: Rc<RefCell<LibContext>>) -> impl Fn(&Lua, String) -> LuaResult<()> {
-    move |_lua, command| {
+struct ExecBgOptions {
+    wait: Option<LuaFunction>,
+}
+
+enum WaitProcessError {
+    IoError(std::io::Error),
+    LuaError(LuaError),
+    TimedOut { stdout: Vec<u8>, stderr: Vec<u8> },
+}
+
+enum ProcessOutput {
+    Stdout(Vec<u8>),
+    Stderr(Vec<u8>),
+}
+
+const WAIT_TIMEOUT: Duration = Duration::from_secs(5);
+const READ_POLL_INTERVAL: Duration = Duration::from_millis(100);
+
+fn wait_process_until<F>(
+    child: &mut std::process::Child,
+    f: F,
+) -> Result<(Option<String>, Option<String>), WaitProcessError>
+where
+    F: Fn(&[u8], &[u8]) -> LuaResult<bool>,
+{
+    let stdout = child.stdout.take();
+    let stderr = child.stderr.take();
+    if stdout.is_none() && stderr.is_none() {
+        return Ok((None, None));
+    }
+
+    let (sender, receiver) = mpsc::channel();
+
+    if let Some(mut stdout) = stdout {
+        let sender = sender.clone();
+        std::thread::spawn(move || {
+            let mut buffer = [0u8; 1024];
+            let mut send_output = true;
+
+            loop {
+                match stdout.read(&mut buffer) {
+                    Ok(0) => break,
+                    Ok(n) => {
+                        if send_output
+                            && sender
+                                .send(Ok(ProcessOutput::Stdout(buffer[..n].to_vec())))
+                                .is_err()
+                        {
+                            send_output = false;
+                        }
+                    }
+                    Err(err) => {
+                        if send_output {
+                            let _ = sender.send(Err(err));
+                        }
+                        break;
+                    }
+                }
+            }
+        });
+    }
+
+    if let Some(mut stderr) = stderr {
+        let sender = sender.clone();
+        std::thread::spawn(move || {
+            let mut buffer = [0u8; 1024];
+            let mut send_output = true;
+
+            loop {
+                match stderr.read(&mut buffer) {
+                    Ok(0) => break,
+                    Ok(n) => {
+                        if send_output
+                            && sender
+                                .send(Ok(ProcessOutput::Stderr(buffer[..n].to_vec())))
+                                .is_err()
+                        {
+                            send_output = false;
+                        }
+                    }
+                    Err(err) => {
+                        if send_output {
+                            let _ = sender.send(Err(err));
+                        }
+                        break;
+                    }
+                }
+            }
+        });
+    }
+    drop(sender);
+
+    let mut stdout_result: Vec<u8> = vec![];
+    let mut stderr_result: Vec<u8> = vec![];
+    let started_at = std::time::Instant::now();
+
+    loop {
+        if started_at.elapsed() >= WAIT_TIMEOUT {
+            return Err(WaitProcessError::TimedOut {
+                stdout: stdout_result,
+                stderr: stderr_result,
+            });
+        };
+
+        match receiver.recv_timeout(READ_POLL_INTERVAL) {
+            Ok(Ok(chunk)) => {
+                match chunk {
+                    ProcessOutput::Stdout(chunk) => stdout_result.extend(&chunk),
+                    ProcessOutput::Stderr(chunk) => stderr_result.extend(&chunk),
+                }
+
+                if f(&stdout_result, &stderr_result).map_err(WaitProcessError::LuaError)? {
+                    return Ok(to_exec_bg_result(stdout_result, stderr_result));
+                }
+            }
+            Ok(Err(err)) => return Err(WaitProcessError::IoError(err)),
+            Err(mpsc::RecvTimeoutError::Timeout) => {
+                if f(&stdout_result, &stderr_result).map_err(WaitProcessError::LuaError)? {
+                    return Ok(to_exec_bg_result(stdout_result, stderr_result));
+                }
+            }
+            Err(mpsc::RecvTimeoutError::Disconnected) => {
+                return Err(WaitProcessError::TimedOut {
+                    stdout: stdout_result,
+                    stderr: stderr_result,
+                });
+            }
+        }
+    }
+}
+
+fn to_exec_bg_result(stdout: Vec<u8>, stderr: Vec<u8>) -> (Option<String>, Option<String>) {
+    (
+        Some(String::from_utf8(stdout).unwrap_or_default()),
+        Some(String::from_utf8(stderr).unwrap_or_default()),
+    )
+}
+
+pub fn exec_bg(
+    ctx: Rc<RefCell<LibContext>>,
+) -> impl Fn(&Lua, (String, Option<LuaTable>)) -> LuaResult<LuaTable> {
+    move |lua, (command, options)| {
         eprintln!("Executing command: {}", command);
 
-        ctx.borrow_mut()
-            .process_list
-            .push_back(crate::common::spawn_background_process(&command).unwrap());
+        let options = options
+            .map(|options| ExecBgOptions {
+                wait: options.get("wait").ok(),
+            })
+            .unwrap_or(ExecBgOptions { wait: None });
 
-        LuaResult::Ok(())
+        let mut process = crate::common::spawn_background_process(&command).unwrap();
+
+        let result: Result<(Option<String>, Option<String>), LuaError> = if let Some(wait) =
+            options.wait
+        {
+            match wait_process_until(&mut process, |stdout, stderr| {
+                let stdout_str = String::from_utf8_lossy(stdout).to_string();
+                let stderr_str = String::from_utf8_lossy(stderr).to_string();
+
+                wait.call::<bool>((stdout_str, stderr_str))
+            }) {
+                Err(WaitProcessError::IoError(err)) => Err(LuaError::RuntimeError(err.to_string())),
+                Err(WaitProcessError::LuaError(err)) => Err(err),
+                Err(WaitProcessError::TimedOut { stdout, stderr }) => {
+                    Err(LuaError::RuntimeError(format!(
+                        "Timed out: stdout: {}; stderr: {}",
+                        String::from_utf8_lossy(&stdout),
+                        String::from_utf8_lossy(&stderr)
+                    )))
+                }
+                Ok((stdout, stderr)) => Ok((stdout, stderr)),
+            }
+        } else {
+            Ok((None, None))
+        };
+
+        ctx.borrow_mut().process_list.push_back(process);
+
+        let (stdout, stderr) = match result {
+            Err(err) => return Err(err),
+            Ok((stdout, stderr)) => (stdout.unwrap_or_default(), stderr.unwrap_or_default()),
+        };
+
+        let result_lua = lua.create_table().unwrap();
+        result_lua.set("stdout", stdout).unwrap();
+        result_lua.set("stderr", stderr).unwrap();
+
+        LuaResult::Ok(result_lua)
     }
 }
 
 struct ExecResult {
-    output: Option<String>,
+    stdout: Option<String>,
+    stderr: Option<String>,
     error: Option<String>,
     status: Option<i32>,
 }
@@ -50,13 +231,20 @@ pub fn exec(_ctx: Rc<RefCell<LibContext>>) -> impl Fn(&Lua, String) -> LuaResult
             .output()
         {
             Err(err) => ExecResult {
-                output: Some("".to_string()),
+                stdout: Some("".to_string()),
+                stderr: Some("".to_string()),
                 error: Some(err.to_string()),
                 status: None,
             },
             Ok(result) => ExecResult {
-                output: Some(
+                stdout: Some(
                     String::from_utf8(result.stdout)
+                        .unwrap_or_default()
+                        .trim_end()
+                        .to_string(),
+                ),
+                stderr: Some(
+                    String::from_utf8(result.stderr)
                         .unwrap_or_default()
                         .trim_end()
                         .to_string(),
@@ -68,7 +256,10 @@ pub fn exec(_ctx: Rc<RefCell<LibContext>>) -> impl Fn(&Lua, String) -> LuaResult
 
         let result_lua = lua.create_table().unwrap();
         result_lua
-            .set("output", result.output.unwrap_or_default())
+            .set("stdout", result.stdout.unwrap_or_default())
+            .unwrap();
+        result_lua
+            .set("stderr", result.stderr.unwrap_or_default())
             .unwrap();
         result_lua
             .set(

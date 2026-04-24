@@ -28,6 +28,8 @@ pub fn spawn_background_process(command: &str) -> std::io::Result<Child> {
         .arg("-c")
         .arg(command)
         .process_group(0)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
         .spawn()
 }
 

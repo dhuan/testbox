@@ -54,6 +54,7 @@ fn main() {
     add_func(&lua, "json_encode", json_encode(ctx.clone()));
     add_func(&lua, "json_decode", json_decode(ctx.clone()));
 
+    let mut failed = false;
     for test_file in files {
         let script = if test_file == "-" {
             stdin().expect("Failed to read stdin.")
@@ -61,8 +62,17 @@ fn main() {
             std::fs::read_to_string(test_file).unwrap()
         };
 
-        lua.load(script).exec().unwrap();
+        if let Err(err) = lua.load(script).exec() {
+            eprintln!("{}", err.to_string());
+            failed = true;
+
+            break;
+        }
     }
 
     crate::common::kill_processes(&mut ctx.clone().borrow_mut().process_list);
+
+    if failed {
+        std::process::exit(1);
+    }
 }
