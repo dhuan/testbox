@@ -48,7 +48,9 @@ Otherwise you can just download the compiled executable from the [releases page]
 $ testbox - <<EOF
 test("API test: get users", function()
     exec_bg("cd path/to/my/app ; npm run dev", {
-        wait_text: "Server is ready",
+        wait = function(stdout, stderr)
+            return string.match(stdout, "Server is ready") ~= nil
+        end
     })
 
     local response = fetch({
