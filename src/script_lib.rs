@@ -1,4 +1,5 @@
 use mlua::prelude::{LuaSerdeExt, *};
+use rand::distr::{Alphanumeric, SampleString};
 use reqwest::header::HeaderMap;
 use serde_json::Value;
 use std::cell::RefCell;
@@ -470,4 +471,13 @@ pub fn json_decode(_ctx: Rc<RefCell<LibContext>>) -> impl Fn(&Lua, String) -> Lu
 
         Ok(lua.to_value(&json_decoded)?)
     }
+}
+
+pub fn random_chars(_ctx: Rc<RefCell<LibContext>>) -> impl Fn(&Lua, i32) -> LuaResult<String> {
+    move |_lua, len| Ok(get_rand_chars(len as usize))
+}
+
+pub fn get_rand_chars(len: usize) -> String {
+    let mut rng = rand::rng();
+    Alphanumeric.sample_string(&mut rng, len)
 }
