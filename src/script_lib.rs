@@ -324,8 +324,6 @@ pub fn test(ctx: Rc<RefCell<LibContext>>) -> impl Fn(&Lua, (String, LuaFunction)
 
 pub fn fetch(_ctx: Rc<RefCell<LibContext>>) -> impl Fn(&Lua, LuaValue) -> LuaResult<LuaTable> {
     move |lua, value| {
-        eprintln!("Let's make a request...");
-
         let options = serde_json::to_value(value)
             .unwrap()
             .as_object()
