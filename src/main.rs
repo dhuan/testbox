@@ -11,7 +11,7 @@ use common::*;
 use script_lib::*;
 
 fn main() {
-    let matches = Command::new("MyApp")
+    let matches = Command::new("testbox")
         .version(env!("CARGO_PKG_VERSION"))
         .about("Test runner with Lua scripts.")
         .arg(Arg::new("files").action(ArgAction::Append))
