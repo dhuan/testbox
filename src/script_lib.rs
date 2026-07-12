@@ -3,7 +3,8 @@ use rand::distr::{Alphanumeric, SampleString};
 use reqwest::header::HeaderMap;
 use serde_json::Value;
 use std::cell::RefCell;
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
+use std::os::raw::c_void;
 use std::rc::Rc;
 use std::{io::prelude::*, sync::mpsc, time::Duration};
 
@@ -473,6 +474,52 @@ pub fn json_decode(_ctx: Rc<RefCell<LibContext>>) -> impl Fn(&Lua, String) -> Lu
 
 pub fn random_chars(_ctx: Rc<RefCell<LibContext>>) -> impl Fn(&Lua, i32) -> LuaResult<String> {
     move |_lua, len| Ok(get_rand_chars(len as usize))
+}
+
+pub fn copy_table(_ctx: Rc<RefCell<LibContext>>) -> impl Fn(&Lua, LuaTable) -> LuaResult<LuaTable> {
+    move |lua, value| {
+        let mut visited = HashMap::new();
+        copy_lua_table(lua, value, &mut visited)
+    }
+}
+
+fn copy_lua_table(
+    lua: &Lua,
+    table: LuaTable,
+    visited: &mut HashMap<*const c_void, LuaTable>,
+) -> LuaResult<LuaTable> {
+    let table_ptr = table.to_pointer();
+    if let Some(copied) = visited.get(&table_ptr) {
+        return Ok(copied.clone());
+    }
+
+    let copied = lua.create_table()?;
+    visited.insert(table_ptr, copied.clone());
+
+    for pair in table.pairs::<LuaValue, LuaValue>() {
+        let (key, value) = pair?;
+        copied.raw_set(
+            copy_lua_value(lua, key, visited)?,
+            copy_lua_value(lua, value, visited)?,
+        )?;
+    }
+
+    if let Some(metatable) = table.metatable() {
+        copied.set_metatable(Some(copy_lua_table(lua, metatable, visited)?))?;
+    }
+
+    Ok(copied)
+}
+
+fn copy_lua_value(
+    lua: &Lua,
+    value: LuaValue,
+    visited: &mut HashMap<*const c_void, LuaTable>,
+) -> LuaResult<LuaValue> {
+    match value {
+        LuaValue::Table(table) => Ok(LuaValue::Table(copy_lua_table(lua, table, visited)?)),
+        value => Ok(value),
+    }
 }
 
 pub fn get_rand_chars(len: usize) -> String {

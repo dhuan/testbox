@@ -77,6 +77,7 @@ fn main() {
     add_func(&lua, "json_encode", json_encode(ctx.clone()));
     add_func(&lua, "json_decode", json_decode(ctx.clone()));
     add_func(&lua, "random_chars", random_chars(ctx.clone()));
+    add_func(&lua, "copy", copy_table(ctx.clone()));
 
     let mut failed = false;
     for test_file in files {
