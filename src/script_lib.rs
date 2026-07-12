@@ -223,15 +223,30 @@ struct ExecResult {
     status: Option<i32>,
 }
 
-pub fn exec(_ctx: Rc<RefCell<LibContext>>) -> impl Fn(&Lua, String) -> LuaResult<LuaTable> {
-    move |lua, command| {
+struct ExecOptions {
+    stdin: Option<String>,
+}
+
+pub fn exec(
+    _ctx: Rc<RefCell<LibContext>>,
+) -> impl Fn(&Lua, (String, Option<LuaTable>)) -> LuaResult<LuaTable> {
+    move |lua, (command, options)| {
         eprintln!("Executing command: {}", command);
 
-        let result = match std::process::Command::new("sh")
-            .arg("-c")
-            .arg(command)
-            .output()
-        {
+        let options = options
+            .map(|options| ExecOptions {
+                stdin: options.get("stdin").ok(),
+            })
+            .unwrap_or(ExecOptions { stdin: None });
+
+        let mut command_builder = std::process::Command::new("sh");
+        command_builder.arg("-c").arg(command);
+
+        if options.stdin.is_some() {
+            command_builder.stdin(std::process::Stdio::piped());
+        }
+
+        let result = match command_builder.output_with_stdin(options.stdin) {
             Err(err) => ExecResult {
                 stdout: Some("".to_string()),
                 stderr: Some("".to_string()),
@@ -272,6 +287,46 @@ pub fn exec(_ctx: Rc<RefCell<LibContext>>) -> impl Fn(&Lua, String) -> LuaResult
         result_lua.set("status", result.status).unwrap();
 
         LuaResult::Ok(result_lua)
+    }
+}
+
+trait OutputWithStdin {
+    fn output_with_stdin(&mut self, stdin: Option<String>)
+    -> std::io::Result<std::process::Output>;
+}
+
+impl OutputWithStdin for std::process::Command {
+    fn output_with_stdin(
+        &mut self,
+        stdin: Option<String>,
+    ) -> std::io::Result<std::process::Output> {
+        if let Some(stdin) = stdin {
+            self.stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped());
+
+            let mut child = self.spawn()?;
+            let stdin_writer = child.stdin.take().map(|mut child_stdin| {
+                std::thread::spawn(move || match child_stdin.write_all(stdin.as_bytes()) {
+                    Ok(_) => Ok(()),
+                    Err(err) if err.kind() == std::io::ErrorKind::BrokenPipe => Ok(()),
+                    Err(err) => Err(err),
+                })
+            });
+
+            let output = child.wait_with_output()?;
+
+            if let Some(stdin_writer) = stdin_writer {
+                match stdin_writer.join() {
+                    Ok(Ok(())) => {}
+                    Ok(Err(err)) => return Err(err),
+                    Err(_) => return Err(std::io::Error::other("stdin writer thread panicked")),
+                }
+            }
+
+            Ok(output)
+        } else {
+            self.output()
+        }
     }
 }
 

@@ -1,6 +1,7 @@
 --[[ EXPECTED OUTPUT
 ✅ exec with awk to uppercase text
 ✅ exec with failing status code
+✅ exec with stdin
 END EXPECTED OUTPUT --]]
 
 test("exec with awk to uppercase text", function()
@@ -17,4 +18,17 @@ test("exec with failing status code", function()
     expect_equal(result.status > 0, true)
     expect_equal(string.match(result.stderr, "this_should_fail") ~= nil, true)
     expect_equal(result.stdout, "")
+end)
+
+test("exec with stdin", function()
+    local result = exec([[grep foo]], {
+        stdin = [[hello
+world
+foo
+bar
+done
+]]
+    })
+
+    expect_equal(result.stdout, "foo")
 end)
