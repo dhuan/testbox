@@ -17,6 +17,7 @@ fn main() {
         .arg(Arg::new("files").action(ArgAction::Append))
         .arg(Arg::new("test-filter").short('t'))
         .arg(Arg::new("test-filter-exact").short('T'))
+        .arg(Arg::new("prelude").short('p'))
         .get_matches();
 
     let files = matches
@@ -41,6 +42,28 @@ fn main() {
 
     let lua = Lua::new();
 
+    let prelude = if let Some(prelude_file) = matches.get_one::<String>("prelude") {
+        Some(std::fs::read_to_string(prelude_file).expect(&format!(
+            r#"Failed to load prelude file "{}""#,
+            prelude_file
+        )))
+    } else {
+        None
+    };
+
+    if let Some(prelude_file) = matches.get_one::<String>("prelude") {
+        let prelude_file_content = std::fs::read_to_string(prelude_file).expect(&format!(
+            r#"Failed to load prelude file "{}""#,
+            prelude_file
+        ));
+
+        if let Err(err) = lua.load(prelude_file_content).exec() {
+            eprintln!("{}", err.to_string());
+
+            std::process::exit(1);
+        }
+    }
+
     let ctx = Rc::new(RefCell::new(LibContext {
         process_list: VecDeque::new(),
         test_filter,
@@ -63,7 +86,14 @@ fn main() {
             std::fs::read_to_string(test_file).unwrap()
         };
 
-        if let Err(err) = lua.load(script).exec() {
+        if let Err(err) = lua
+            .load(format!(
+                "{}\n{}",
+                prelude.clone().unwrap_or_default(),
+                script
+            ))
+            .exec()
+        {
             eprintln!("{}", err.to_string());
             failed = true;
 
