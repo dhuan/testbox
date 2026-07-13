@@ -511,6 +511,73 @@ pub fn expect_equal(
     }
 }
 
+pub fn expect_match(
+    _ctx: Rc<RefCell<LibContext>>,
+) -> impl Fn(&Lua, LuaMultiValue) -> LuaResult<()> {
+    move |_lua, values| {
+        if values.len() != 2 {
+            return Err(LuaError::BindError);
+        }
+
+        let values = values.into_iter().collect::<Vec<LuaValue>>();
+        let [actual_lua, expected_lua]: [LuaValue; 2] = values.try_into().unwrap();
+
+        if !matches!(actual_lua, LuaValue::Table(_)) || !matches!(expected_lua, LuaValue::Table(_))
+        {
+            return Err(LuaError::RuntimeError(
+                "expect_match expects two tables".to_string(),
+            ));
+        }
+
+        let actual = serde_json::to_value(actual_lua).unwrap();
+        let expected = serde_json::to_value(expected_lua).unwrap();
+
+        if let Some(message) = match_partial_value(&actual, &expected, "$") {
+            return Err(LuaError::RuntimeError(format!(
+                "Not matching!\n{}",
+                message
+            )));
+        }
+
+        Ok(())
+    }
+}
+
+fn match_partial_value(actual: &Value, expected: &Value, path: &str) -> Option<String> {
+    match expected {
+        Value::Object(expected_object) => {
+            let Value::Object(actual_object) = actual else {
+                return Some(format!(
+                    "At:    {}\nLeft:  {}\nRight: {}",
+                    path, actual, expected
+                ));
+            };
+
+            for (key, expected_value) in expected_object {
+                let key_path = format!("{}.{}", path, key);
+                let Some(actual_value) = actual_object.get(key) else {
+                    return Some(format!(
+                        "Missing key: {}\nRight:       {}",
+                        key_path, expected_value
+                    ));
+                };
+
+                if let Some(message) = match_partial_value(actual_value, expected_value, &key_path)
+                {
+                    return Some(message);
+                }
+            }
+
+            None
+        }
+        _ if actual.eq(expected) => None,
+        _ => Some(format!(
+            "At:    {}\nLeft:  {}\nRight: {}",
+            path, actual, expected
+        )),
+    }
+}
+
 pub fn json_encode(_ctx: Rc<RefCell<LibContext>>) -> impl Fn(&Lua, LuaTable) -> LuaResult<String> {
     move |lua, value| {
         let json_value: serde_json::Value = lua.from_value(LuaValue::Table(value))?;

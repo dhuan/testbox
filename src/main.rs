@@ -70,6 +70,7 @@ fn main() {
     }));
 
     add_func(&lua, "expect_equal", expect_equal(ctx.clone()));
+    add_func(&lua, "expect_match", expect_match(ctx.clone()));
     add_func(&lua, "exec_bg", exec_bg(ctx.clone()));
     add_func(&lua, "exec", exec(ctx.clone()));
     add_func(&lua, "fetch", fetch(ctx.clone()));
