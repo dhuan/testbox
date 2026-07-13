@@ -23,6 +23,8 @@ pub enum FilterMode {
 pub struct LibContext {
     pub process_list: VecDeque<std::process::Child>,
     pub test_filter: Option<FilterMode>,
+    pub fail_fast: bool,
+    pub stop_requested: bool,
 }
 
 struct ExecBgOptions {
@@ -345,6 +347,10 @@ fn test_match(filter: &FilterMode, test_name: &str) -> bool {
 
 pub fn test(ctx: Rc<RefCell<LibContext>>) -> impl Fn(&Lua, (String, LuaFunction)) -> LuaResult<()> {
     move |_lua, (test_name, func)| {
+        if ctx.borrow().stop_requested {
+            return Ok(());
+        }
+
         if let Some(test_filter) = &ctx.clone().borrow().test_filter {
             if !test_match(&test_filter, &test_name) {
                 return Ok(());
@@ -368,6 +374,12 @@ pub fn test(ctx: Rc<RefCell<LibContext>>) -> impl Fn(&Lua, (String, LuaFunction)
                     _ => err.to_string(),
                 },
             );
+
+            let mut ctx = ctx.borrow_mut();
+            if ctx.fail_fast {
+                ctx.stop_requested = true;
+                return Err(LuaError::RuntimeError("fail-fast requested".to_string()));
+            }
         } else {
             println!("✅ {}", test_name);
         }

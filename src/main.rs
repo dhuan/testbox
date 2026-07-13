@@ -18,6 +18,12 @@ fn main() {
         .arg(Arg::new("test-filter").short('t'))
         .arg(Arg::new("test-filter-exact").short('T'))
         .arg(Arg::new("prelude").short('p'))
+        .arg(
+            Arg::new("fail-fast")
+                .long("fail-fast")
+                .short('x')
+                .action(ArgAction::SetTrue),
+        )
         .get_matches();
 
     let files = matches
@@ -67,6 +73,8 @@ fn main() {
     let ctx = Rc::new(RefCell::new(LibContext {
         process_list: VecDeque::new(),
         test_filter,
+        fail_fast: matches.get_flag("fail-fast"),
+        stop_requested: false,
     }));
 
     add_func(&lua, "expect_equal", expect_equal(ctx.clone()));
@@ -97,9 +105,15 @@ fn main() {
             ))
             .exec()
         {
-            eprintln!("{}", err.to_string());
-            failed = true;
+            if !ctx.borrow().stop_requested {
+                eprintln!("{}", err.to_string());
+                failed = true;
+            }
 
+            break;
+        }
+
+        if ctx.borrow().stop_requested {
             break;
         }
     }
