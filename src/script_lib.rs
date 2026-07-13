@@ -27,6 +27,7 @@ pub struct LibContext {
     pub stop_requested: bool,
     pub test_file_name: String,
     pub test_file_header_printed: bool,
+    pub any_test_file_header_printed: bool,
 }
 
 impl LibContext {
@@ -40,8 +41,13 @@ impl LibContext {
             return;
         }
 
+        if self.any_test_file_header_printed {
+            println!();
+        }
+
         println!("📁 {}", self.test_file_name);
         self.test_file_header_printed = true;
+        self.any_test_file_header_printed = true;
     }
 }
 
@@ -379,7 +385,7 @@ pub fn test(ctx: Rc<RefCell<LibContext>>) -> impl Fn(&Lua, (String, LuaFunction)
 
         if let Err(err) = func.call::<()>(Some(123)) {
             println!(
-                "  ❌ {}\n{}",
+                "❌ {}\n{}",
                 test_name,
                 match err.clone() {
                     LuaError::CallbackError {
@@ -401,7 +407,7 @@ pub fn test(ctx: Rc<RefCell<LibContext>>) -> impl Fn(&Lua, (String, LuaFunction)
                 return Err(LuaError::RuntimeError("fail-fast requested".to_string()));
             }
         } else {
-            println!("  ✅ {}", test_name);
+            println!("✅ {}", test_name);
         }
 
         crate::common::kill_processes(&mut ctx.clone().borrow_mut().process_list);

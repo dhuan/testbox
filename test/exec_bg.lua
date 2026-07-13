@@ -1,6 +1,6 @@
 --[[ EXPECTED OUTPUT
 📁 exec_bg.lua
-  ✅ exec_bg: wait for text
+✅ exec_bg: wait for text
 END EXPECTED OUTPUT --]]
 
 test("exec_bg: wait for text", function()

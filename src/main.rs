@@ -78,6 +78,7 @@ fn main() {
         stop_requested: false,
         test_file_name: String::new(),
         test_file_header_printed: false,
+        any_test_file_header_printed: false,
     }));
 
     add_func(&lua, "expect_equal", expect_equal(ctx.clone()));

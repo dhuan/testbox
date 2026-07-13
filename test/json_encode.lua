@@ -1,6 +1,6 @@
 --[[ EXPECTED OUTPUT
 📁 json_encode.lua
-  ✅ convert lua table to json string
+✅ convert lua table to json string
 END EXPECTED OUTPUT --]]
 
 test("convert lua table to json string", function()

@@ -1,14 +1,14 @@
 --[[ EXPECTED OUTPUT
 📁 Assertion matching
-  ✅ expect_match matches partial object fields
-  ✅ expect_match matches nested object fields partially
-  ✅ expect_match rejects top-level scalars
-  ❌ expect_match reports changed field values
+✅ expect_match matches partial object fields
+✅ expect_match matches nested object fields partially
+✅ expect_match rejects top-level scalars
+❌ expect_match reports changed field values
 Not matching!
 At:    $.hello
 Left:  "world"
 Right: "changed!"
-  ❌ expect_match reports missing fields
+❌ expect_match reports missing fields
 Not matching!
 Missing key: $.hello
 Right:       "world"

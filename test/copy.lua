@@ -1,6 +1,6 @@
 --[[ EXPECTED OUTPUT
 📁 copy.lua
-  ✅ deep copy lua table
+✅ deep copy lua table
 END EXPECTED OUTPUT --]]
 
 test("deep copy lua table", function()

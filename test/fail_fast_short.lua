@@ -1,6 +1,6 @@
 --[[ EXPECTED OUTPUT
 📁 fail_fast_short.lua
-  ❌ first test fails
+❌ first test fails
 Not equal!
 Left:  1
 Right: 2

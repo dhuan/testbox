@@ -1,6 +1,6 @@
 --[[ EXPECTED OUTPUT
 📁 test_filter_exact.lua
-  ✅ test two
+✅ test two
 END EXPECTED OUTPUT --]]
 
 -- OPTIONS: -T 'test TWO'

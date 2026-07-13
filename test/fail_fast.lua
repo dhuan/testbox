@@ -1,7 +1,7 @@
 --[[ EXPECTED OUTPUT
 📁 fail_fast.lua
-  ✅ first test passes
-  ❌ second test fails
+✅ first test passes
+❌ second test fails
 Not equal!
 Left:  1
 Right: 2
