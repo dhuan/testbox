@@ -1,6 +1,7 @@
 --[[ EXPECTED OUTPUT
-✅ test 1 equals 1
-❌ test 1 equals 2
+📁 expect_equal.lua
+  ✅ test 1 equals 1
+  ❌ test 1 equals 2
 Not equal!
 Left:  1
 Right: 2

@@ -25,6 +25,24 @@ pub struct LibContext {
     pub test_filter: Option<FilterMode>,
     pub fail_fast: bool,
     pub stop_requested: bool,
+    pub test_file_name: String,
+    pub test_file_header_printed: bool,
+}
+
+impl LibContext {
+    pub fn set_test_file_name(&mut self, test_file_name: String) {
+        self.test_file_name = test_file_name;
+        self.test_file_header_printed = false;
+    }
+
+    fn print_test_file_header(&mut self) {
+        if self.test_file_header_printed {
+            return;
+        }
+
+        println!("📁 {}", self.test_file_name);
+        self.test_file_header_printed = true;
+    }
 }
 
 struct ExecBgOptions {
@@ -357,9 +375,11 @@ pub fn test(ctx: Rc<RefCell<LibContext>>) -> impl Fn(&Lua, (String, LuaFunction)
             }
         }
 
+        ctx.borrow_mut().print_test_file_header();
+
         if let Err(err) = func.call::<()>(Some(123)) {
             println!(
-                "❌ {}\n{}",
+                "  ❌ {}\n{}",
                 test_name,
                 match err.clone() {
                     LuaError::CallbackError {
@@ -381,7 +401,7 @@ pub fn test(ctx: Rc<RefCell<LibContext>>) -> impl Fn(&Lua, (String, LuaFunction)
                 return Err(LuaError::RuntimeError("fail-fast requested".to_string()));
             }
         } else {
-            println!("✅ {}", test_name);
+            println!("  ✅ {}", test_name);
         }
 
         crate::common::kill_processes(&mut ctx.clone().borrow_mut().process_list);

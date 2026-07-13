@@ -1,5 +1,6 @@
 --[[ EXPECTED OUTPUT
-✅ test two
+📁 test_filter_regex.lua
+  ✅ test two
 END EXPECTED OUTPUT --]]
 
 -- OPTIONS: -t t[a-z]o

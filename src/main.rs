@@ -2,6 +2,7 @@ use clap::{Arg, ArgAction, Command};
 use mlua::prelude::*;
 use std::cell::RefCell;
 use std::collections::VecDeque;
+use std::path::Path;
 use std::rc::Rc;
 
 mod common;
@@ -75,6 +76,8 @@ fn main() {
         test_filter,
         fail_fast: matches.get_flag("fail-fast"),
         stop_requested: false,
+        test_file_name: String::new(),
+        test_file_header_printed: false,
     }));
 
     add_func(&lua, "expect_equal", expect_equal(ctx.clone()));
@@ -96,6 +99,9 @@ fn main() {
         } else {
             std::fs::read_to_string(test_file).unwrap()
         };
+
+        ctx.borrow_mut()
+            .set_test_file_name(test_file_name(test_file, &script));
 
         if let Err(err) = lua
             .load(format!(
@@ -123,4 +129,32 @@ fn main() {
     if failed {
         std::process::exit(1);
     }
+}
+
+fn test_file_name(test_file: &str, script: &str) -> String {
+    parse_test_file_name(script).unwrap_or_else(|| {
+        Path::new(test_file)
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or(test_file)
+            .to_string()
+    })
+}
+
+fn parse_test_file_name(script: &str) -> Option<String> {
+    for line in script.lines() {
+        let Some(comment) = line.trim_start().strip_prefix("--") else {
+            continue;
+        };
+        let Some(name) = comment.trim_start().strip_prefix("Test:") else {
+            continue;
+        };
+
+        let name = name.trim();
+        if !name.is_empty() {
+            return Some(name.to_string());
+        }
+    }
+
+    None
 }

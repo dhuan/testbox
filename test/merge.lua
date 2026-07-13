@@ -1,7 +1,8 @@
 --[[ EXPECTED OUTPUT
-✅ merge returns a new table with overwritten keys
-✅ merge accepts multiple source tables
-✅ merge is shallow
+📁 merge.lua
+  ✅ merge returns a new table with overwritten keys
+  ✅ merge accepts multiple source tables
+  ✅ merge is shallow
 END EXPECTED OUTPUT --]]
 
 test("merge returns a new table with overwritten keys", function()

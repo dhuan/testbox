@@ -1,7 +1,8 @@
 --[[ EXPECTED OUTPUT
-✅ exec with awk to uppercase text
-✅ exec with failing status code
-✅ exec with stdin
+📁 exec.lua
+  ✅ exec with awk to uppercase text
+  ✅ exec with failing status code
+  ✅ exec with stdin
 END EXPECTED OUTPUT --]]
 
 test("exec with awk to uppercase text", function()

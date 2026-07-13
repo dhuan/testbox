@@ -1,6 +1,7 @@
 --[[ EXPECTED OUTPUT
-✅ assert response data
-✅ POST request
+📁 fetch.lua
+  ✅ assert response data
+  ✅ POST request
 END EXPECTED OUTPUT --]]
 
 local mock_server = [[
