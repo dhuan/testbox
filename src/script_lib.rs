@@ -531,6 +531,33 @@ pub fn random_chars(_ctx: Rc<RefCell<LibContext>>) -> impl Fn(&Lua, i32) -> LuaR
     move |_lua, len| Ok(get_rand_chars(len as usize))
 }
 
+pub fn merge_table(
+    _ctx: Rc<RefCell<LibContext>>,
+) -> impl Fn(&Lua, LuaMultiValue) -> LuaResult<LuaTable> {
+    move |lua, values| {
+        let merged = lua.create_table()?;
+
+        for value in values {
+            let table = match value {
+                LuaValue::Table(table) => table,
+                value => {
+                    return Err(LuaError::RuntimeError(format!(
+                        "merge expects tables, got {}",
+                        value.type_name()
+                    )));
+                }
+            };
+
+            for pair in table.pairs::<LuaValue, LuaValue>() {
+                let (key, value) = pair?;
+                merged.raw_set(key, value)?;
+            }
+        }
+
+        Ok(merged)
+    }
+}
+
 pub fn copy_table(_ctx: Rc<RefCell<LibContext>>) -> impl Fn(&Lua, LuaTable) -> LuaResult<LuaTable> {
     move |lua, value| {
         let mut visited = HashMap::new();
