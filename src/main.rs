@@ -73,9 +73,11 @@ fn main() {
 
     let ctx = Rc::new(RefCell::new(LibContext {
         process_list: VecDeque::new(),
+        test_frames: Vec::new(),
         test_filter,
         fail_fast: matches.get_flag("fail-fast"),
         stop_requested: false,
+        has_failed: false,
         test_file_name: String::new(),
         test_file_header_printed: false,
         any_test_file_header_printed: false,
@@ -126,6 +128,10 @@ fn main() {
     }
 
     crate::common::kill_processes(&mut ctx.clone().borrow_mut().process_list);
+
+    if ctx.borrow().has_failed {
+        failed = true;
+    }
 
     if failed {
         std::process::exit(1);

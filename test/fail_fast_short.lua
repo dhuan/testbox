@@ -7,6 +7,7 @@ Right: 2
 END EXPECTED OUTPUT --]]
 
 -- OPTIONS: -x
+-- EXIT CODE: 1
 
 test("first test fails", function()
     expect_equal(1, 2)

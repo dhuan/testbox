@@ -8,6 +8,7 @@ Right: 2
 END EXPECTED OUTPUT --]]
 
 -- OPTIONS: --fail-fast
+-- EXIT CODE: 1
 
 test("first test passes", function()
     expect_equal(1, 1)

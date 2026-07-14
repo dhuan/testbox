@@ -15,6 +15,7 @@ Right:       "world"
 END EXPECTED OUTPUT --]]
 
 -- Test: Assertion matching
+-- EXIT CODE: 1
 
 test("expect_match matches partial object fields", function()
     expect_match({

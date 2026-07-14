@@ -6,12 +6,12 @@ use std::process::{Child, Command};
 
 pub fn add_func<F, A, R>(lua: &Lua, func_name: &str, func: F)
 where
-    F: FnMut(&Lua, A) -> LuaResult<R> + mlua::MaybeSend + 'static,
+    F: Fn(&Lua, A) -> LuaResult<R> + mlua::MaybeSend + 'static,
     A: FromLuaMulti,
     R: IntoLuaMulti,
 {
     lua.globals()
-        .set(func_name, lua.create_function_mut(func).unwrap())
+        .set(func_name, lua.create_function(func).unwrap())
         .unwrap();
 }
 
@@ -34,7 +34,14 @@ pub fn spawn_background_process(command: &str) -> std::io::Result<Child> {
 }
 
 pub fn kill_processes(list: &mut VecDeque<Child>) {
-    while let Some(mut child) = list.pop_back() {
+    kill_processes_from(list, 0);
+}
+
+pub fn kill_processes_from(list: &mut VecDeque<Child>, start: usize) {
+    while list.len() > start {
+        let Some(mut child) = list.pop_back() else {
+            break;
+        };
         let process_group_id = child.id() as i32;
         eprintln!("Terminating process group {}...", process_group_id);
 
@@ -78,5 +85,25 @@ mod tests {
 
         let err = kill_process_group(process_group_id).unwrap_err();
         assert_eq!(err.raw_os_error(), Some(3));
+    }
+
+    #[test]
+    fn kill_processes_from_keeps_earlier_processes() {
+        let first = spawn_background_process("sleep 1000 >&2").unwrap();
+        let first_process_group_id = first.id() as i32;
+        let second = spawn_background_process("sleep 1000 >&2").unwrap();
+        let second_process_group_id = second.id() as i32;
+        let mut list = VecDeque::from([first, second]);
+
+        kill_processes_from(&mut list, 1);
+        std::thread::sleep(Duration::from_millis(50));
+
+        assert_eq!(list.len(), 1);
+        let second_err = kill_process_group(second_process_group_id).unwrap_err();
+        assert_eq!(second_err.raw_os_error(), Some(3));
+        kill_process_group(first_process_group_id).unwrap();
+
+        let mut first = list.pop_back().unwrap();
+        first.wait().expect("Failed to reap background process.");
     }
 }

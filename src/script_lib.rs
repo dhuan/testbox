@@ -22,18 +22,33 @@ pub enum FilterMode {
 
 pub struct LibContext {
     pub process_list: VecDeque<std::process::Child>,
+    pub test_frames: Vec<TestFrame>,
     pub test_filter: Option<FilterMode>,
     pub fail_fast: bool,
     pub stop_requested: bool,
+    pub has_failed: bool,
     pub test_file_name: String,
     pub test_file_header_printed: bool,
     pub any_test_file_header_printed: bool,
+}
+
+pub struct TestFrame {
+    test_name: String,
+    depth: usize,
+    started: bool,
+    failed: bool,
+    process_start: usize,
+}
+
+fn flush_stdout() {
+    std::io::stdout().flush().expect("Failed to flush stdout.");
 }
 
 impl LibContext {
     pub fn set_test_file_name(&mut self, test_file_name: String) {
         self.test_file_name = test_file_name;
         self.test_file_header_printed = false;
+        self.test_frames.clear();
     }
 
     fn print_test_file_header(&mut self) {
@@ -46,6 +61,7 @@ impl LibContext {
         }
 
         println!("📁 {}", self.test_file_name);
+        flush_stdout();
         self.test_file_header_printed = true;
         self.any_test_file_header_printed = true;
     }
@@ -369,6 +385,70 @@ fn test_match(filter: &FilterMode, test_name: &str) -> bool {
     }
 }
 
+const CHILD_TEST_FAILED: &str = "__testbox_child_test_failed__";
+
+fn lua_runtime_error(err: &LuaError) -> Option<String> {
+    match err {
+        LuaError::CallbackError {
+            cause,
+            traceback: _,
+        } => {
+            if let LuaError::RuntimeError(err) = cause.as_ref() {
+                Some(err.to_owned())
+            } else {
+                None
+            }
+        }
+        LuaError::RuntimeError(err) => Some(err.to_owned()),
+        _ => None,
+    }
+}
+
+fn is_child_test_failure(err: &LuaError) -> bool {
+    lua_runtime_error(err).as_deref() == Some(CHILD_TEST_FAILED)
+}
+
+fn lua_error_message(err: LuaError) -> String {
+    match err.clone() {
+        LuaError::CallbackError {
+            cause,
+            traceback: _,
+        } => {
+            if let LuaError::RuntimeError(err) = cause.as_ref() {
+                err.to_owned()
+            } else {
+                err.to_string()
+            }
+        }
+        _ => err.to_string(),
+    }
+}
+
+fn print_test_start(test_name: &str, depth: usize) {
+    println!("{}⌛ {}", "  ".repeat(depth), test_name);
+    flush_stdout();
+}
+
+fn test_output(test_name: &str, depth: usize, failed: bool, err: Option<String>) -> String {
+    let indent = "  ".repeat(depth);
+    let mut output = String::new();
+
+    output.push_str(&indent);
+    output.push_str(if failed { "❌ " } else { "✅ " });
+    output.push_str(test_name);
+    output.push('\n');
+
+    if let Some(err) = err {
+        for line in err.lines() {
+            output.push_str(&indent);
+            output.push_str(line);
+            output.push('\n');
+        }
+    }
+
+    output
+}
+
 pub fn test(ctx: Rc<RefCell<LibContext>>) -> impl Fn(&Lua, (String, LuaFunction)) -> LuaResult<()> {
     move |_lua, (test_name, func)| {
         if ctx.borrow().stop_requested {
@@ -381,36 +461,78 @@ pub fn test(ctx: Rc<RefCell<LibContext>>) -> impl Fn(&Lua, (String, LuaFunction)
             }
         }
 
-        ctx.borrow_mut().print_test_file_header();
-
-        if let Err(err) = func.call::<()>(Some(123)) {
-            println!(
-                "❌ {}\n{}",
-                test_name,
-                match err.clone() {
-                    LuaError::CallbackError {
-                        cause,
-                        traceback: _,
-                    } =>
-                        if let LuaError::RuntimeError(err) = cause.clone().as_ref() {
-                            err.to_owned()
-                        } else {
-                            err.to_string()
-                        },
-                    _ => err.to_string(),
-                },
-            );
-
+        let depth = {
             let mut ctx = ctx.borrow_mut();
-            if ctx.fail_fast {
-                ctx.stop_requested = true;
-                return Err(LuaError::RuntimeError("fail-fast requested".to_string()));
+            ctx.print_test_file_header();
+
+            if let Some(parent) = ctx.test_frames.last_mut() {
+                if !parent.started {
+                    print_test_start(&parent.test_name, parent.depth);
+                    parent.started = true;
+                }
             }
-        } else {
-            println!("✅ {}", test_name);
+
+            let depth = ctx.test_frames.len();
+            let process_start = ctx.process_list.len();
+            ctx.test_frames.push(TestFrame {
+                test_name: test_name.clone(),
+                depth,
+                started: false,
+                failed: false,
+                process_start,
+            });
+
+            depth
+        };
+
+        let result = func.call::<()>(());
+        let own_error = match result {
+            Ok(()) => None,
+            Err(err) if is_child_test_failure(&err) => None,
+            Err(err) => Some(lua_error_message(err)),
+        };
+
+        let mut top_level_output = None;
+        let mut should_propagate = false;
+        let should_abort;
+
+        {
+            let mut ctx = ctx.borrow_mut();
+            let frame = ctx.test_frames.pop().expect("test frame should exist");
+            let failed = frame.failed || own_error.is_some();
+            let output = test_output(&test_name, depth, failed, own_error);
+
+            crate::common::kill_processes_from(&mut ctx.process_list, frame.process_start);
+
+            if failed {
+                ctx.has_failed = true;
+                if ctx.fail_fast {
+                    ctx.stop_requested = true;
+                }
+            }
+
+            if let Some(parent) = ctx.test_frames.last_mut() {
+                if failed {
+                    parent.failed = true;
+                    should_propagate = true;
+                }
+                print!("{}", output);
+                flush_stdout();
+            } else {
+                top_level_output = Some(output);
+            }
+
+            should_abort = ctx.stop_requested;
         }
 
-        crate::common::kill_processes(&mut ctx.clone().borrow_mut().process_list);
+        if let Some(output) = top_level_output {
+            print!("{}", output);
+            flush_stdout();
+        }
+
+        if should_abort || should_propagate {
+            return Err(LuaError::RuntimeError(CHILD_TEST_FAILED.to_string()));
+        }
 
         Ok(())
     }

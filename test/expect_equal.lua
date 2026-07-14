@@ -7,6 +7,8 @@ Left:  1
 Right: 2
 END EXPECTED OUTPUT --]]
 
+-- EXIT CODE: 1
+
 test("test 1 equals 1", function()
     expect_equal(1, 1)
 end)
