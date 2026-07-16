@@ -6,7 +6,11 @@ use std::cell::RefCell;
 use std::collections::{HashMap, VecDeque};
 use std::os::raw::c_void;
 use std::rc::Rc;
-use std::{io::prelude::*, sync::mpsc, time::Duration};
+use std::{
+    io::prelude::*,
+    sync::{Arc, Mutex, mpsc},
+    time::Duration,
+};
 
 struct FetchOptions {
     url: String,
@@ -69,6 +73,7 @@ impl LibContext {
 
 struct ExecBgOptions {
     wait: Option<LuaFunction>,
+    save_output_as: Option<String>,
 }
 
 enum WaitProcessError {
@@ -87,77 +92,15 @@ const READ_POLL_INTERVAL: Duration = Duration::from_millis(100);
 
 fn wait_process_until<F>(
     child: &mut std::process::Child,
+    save_output: Option<Arc<Mutex<std::fs::File>>>,
     f: F,
 ) -> Result<(Option<String>, Option<String>), WaitProcessError>
 where
     F: Fn(&[u8], &[u8]) -> LuaResult<bool>,
 {
-    let stdout = child.stdout.take();
-    let stderr = child.stderr.take();
-    if stdout.is_none() && stderr.is_none() {
+    let Some(receiver) = start_process_output_readers(child, save_output) else {
         return Ok((None, None));
-    }
-
-    let (sender, receiver) = mpsc::channel();
-
-    if let Some(mut stdout) = stdout {
-        let sender = sender.clone();
-        std::thread::spawn(move || {
-            let mut buffer = [0u8; 1024];
-            let mut send_output = true;
-
-            loop {
-                match stdout.read(&mut buffer) {
-                    Ok(0) => break,
-                    Ok(n) => {
-                        if send_output
-                            && sender
-                                .send(Ok(ProcessOutput::Stdout(buffer[..n].to_vec())))
-                                .is_err()
-                        {
-                            send_output = false;
-                        }
-                    }
-                    Err(err) => {
-                        if send_output {
-                            let _ = sender.send(Err(err));
-                        }
-                        break;
-                    }
-                }
-            }
-        });
-    }
-
-    if let Some(mut stderr) = stderr {
-        let sender = sender.clone();
-        std::thread::spawn(move || {
-            let mut buffer = [0u8; 1024];
-            let mut send_output = true;
-
-            loop {
-                match stderr.read(&mut buffer) {
-                    Ok(0) => break,
-                    Ok(n) => {
-                        if send_output
-                            && sender
-                                .send(Ok(ProcessOutput::Stderr(buffer[..n].to_vec())))
-                                .is_err()
-                        {
-                            send_output = false;
-                        }
-                    }
-                    Err(err) => {
-                        if send_output {
-                            let _ = sender.send(Err(err));
-                        }
-                        break;
-                    }
-                }
-            }
-        });
-    }
-    drop(sender);
+    };
 
     let mut stdout_result: Vec<u8> = vec![];
     let mut stderr_result: Vec<u8> = vec![];
@@ -198,6 +141,106 @@ where
     }
 }
 
+fn start_process_output_readers(
+    child: &mut std::process::Child,
+    save_output: Option<Arc<Mutex<std::fs::File>>>,
+) -> Option<mpsc::Receiver<Result<ProcessOutput, std::io::Error>>> {
+    let stdout = child.stdout.take();
+    let stderr = child.stderr.take();
+    if stdout.is_none() && stderr.is_none() {
+        return None;
+    }
+
+    let (sender, receiver) = mpsc::channel();
+
+    if let Some(mut stdout) = stdout {
+        let sender = sender.clone();
+        let save_output = save_output.clone();
+        std::thread::spawn(move || {
+            let mut buffer = [0u8; 1024];
+            let mut send_output = true;
+
+            loop {
+                match stdout.read(&mut buffer) {
+                    Ok(0) => break,
+                    Ok(n) => {
+                        let chunk = buffer[..n].to_vec();
+                        if let Err(err) = save_output_chunk(&save_output, &chunk) {
+                            if send_output {
+                                let _ = sender.send(Err(err));
+                            }
+                            break;
+                        }
+
+                        if send_output && sender.send(Ok(ProcessOutput::Stdout(chunk))).is_err() {
+                            send_output = false;
+                        }
+                    }
+                    Err(err) => {
+                        if send_output {
+                            let _ = sender.send(Err(err));
+                        }
+                        break;
+                    }
+                }
+            }
+        });
+    }
+
+    if let Some(mut stderr) = stderr {
+        let sender = sender.clone();
+        let save_output = save_output.clone();
+        std::thread::spawn(move || {
+            let mut buffer = [0u8; 1024];
+            let mut send_output = true;
+
+            loop {
+                match stderr.read(&mut buffer) {
+                    Ok(0) => break,
+                    Ok(n) => {
+                        let chunk = buffer[..n].to_vec();
+                        if let Err(err) = save_output_chunk(&save_output, &chunk) {
+                            if send_output {
+                                let _ = sender.send(Err(err));
+                            }
+                            break;
+                        }
+
+                        if send_output && sender.send(Ok(ProcessOutput::Stderr(chunk))).is_err() {
+                            send_output = false;
+                        }
+                    }
+                    Err(err) => {
+                        if send_output {
+                            let _ = sender.send(Err(err));
+                        }
+                        break;
+                    }
+                }
+            }
+        });
+    }
+    drop(sender);
+
+    Some(receiver)
+}
+
+fn save_output_chunk(
+    save_output: &Option<Arc<Mutex<std::fs::File>>>,
+    chunk: &[u8],
+) -> std::io::Result<()> {
+    if let Some(save_output) = save_output {
+        let mut save_output = save_output
+            .lock()
+            .map_err(|_| std::io::Error::other("saved output file lock was poisoned"))?;
+
+        save_output.write_all(chunk)?;
+        save_output.flush()?;
+    }
+
+    Ok(())
+}
+
 fn to_exec_bg_result(stdout: Vec<u8>, stderr: Vec<u8>) -> (Option<String>, Option<String>) {
     (
         Some(String::from_utf8(stdout).unwrap_or_default()),
@@ -214,15 +257,24 @@ pub fn exec_bg(
         let options = options
             .map(|options| ExecBgOptions {
                 wait: options.get("wait").ok(),
+                save_output_as: options.get("save_output_as").ok(),
             })
-            .unwrap_or(ExecBgOptions { wait: None });
+            .unwrap_or(ExecBgOptions {
+                wait: None,
+                save_output_as: None,
+            });
+
+        let save_output = match options.save_output_as {
+            Some(path) => Some(Arc::new(Mutex::new(std::fs::File::create(path)?))),
+            None => None,
+        };
 
         let mut process = crate::common::spawn_background_process(&command).unwrap();
 
         let result: Result<(Option<String>, Option<String>), LuaError> = if let Some(wait) =
             options.wait
         {
-            match wait_process_until(&mut process, |stdout, stderr| {
+            match wait_process_until(&mut process, save_output, |stdout, stderr| {
                 let stdout_str = String::from_utf8_lossy(stdout).to_string();
                 let stderr_str = String::from_utf8_lossy(stderr).to_string();
 
@@ -240,6 +292,7 @@ pub fn exec_bg(
                 Ok((stdout, stderr)) => Ok((stdout, stderr)),
             }
         } else {
+            start_process_output_readers(&mut process, save_output);
             Ok((None, None))
         };
 
