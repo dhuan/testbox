@@ -95,6 +95,14 @@ fn main() {
     add_func(&lua, "merge", merge_table(ctx.clone()));
     add_func(&lua, "copy", copy_table(ctx.clone()));
 
+    for test_file in files.clone() {
+        if !std::fs::exists(test_file).unwrap_or(false) {
+            eprintln!("This file does not exist: {}", test_file);
+
+            std::process::exit(1);
+        }
+    }
+
     let mut failed = false;
     for test_file in files {
         let script = if test_file == "-" {
