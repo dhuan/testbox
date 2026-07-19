@@ -27,6 +27,13 @@ extract_expected_exit_code () {
 '
 }
 
+if ! which mock 2> /dev/null
+then
+    echo "Missing program: mock"
+
+    exit 1
+fi
+
 OUTPUT_STDERR=$(mktemp)
 
 ls test/*.lua | while read TEST_FILE
