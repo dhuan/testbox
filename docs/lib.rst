@@ -1,6 +1,9 @@
 Testbox Library
 ###############
 
+.. contents::
+   :local:
+
 exec
 ====
 
