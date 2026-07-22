@@ -1,5 +1,5 @@
 build:
-	cargo build
+	cargo build --profile release
 
 test:
 	sh test/test.sh
