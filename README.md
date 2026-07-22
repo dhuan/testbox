@@ -4,7 +4,6 @@ A fast test runner that works out of the box. Zero dependencies.
 
 * Tests are written in Lua (but you don't need Lua installed on your system)
 * Batteries included for API testing
-* Watch mode runs your tests whenever you change files
 
 ```sh
 $ testbox - <<EOF
