@@ -44,5 +44,11 @@ jobs:
       - name: Cargo build (Rust TLS)
         run: cargo build --all
 
+      - name: Set up mock
+        run: |
+          env | grep PATH
+          cd ~/bin
+          curl https://github.com/dhuan/mock/releases/download/v1.4.16/mock_v1.4.16_linux-386.tar.gz | tar xz
+
       - name: E2E test
         run: make test
