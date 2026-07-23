@@ -41,7 +41,6 @@ jobs:
 
       - name: Set up mock
         run: |
-          set -xe
           mkdir -p ~/bin
           cd ~/bin
           curl -L https://github.com/dhuan/mock/releases/download/v1.4.16/mock_v1.4.16_linux-386.tar.gz | tar xz
