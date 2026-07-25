@@ -49,4 +49,4 @@ jobs:
           PATH=${PATH}:~/bin sh -c 'make test'
 
       - name: E2E test
-        run: make test
+        run: PATH=${PATH}:~/bin sh -c 'make test'
