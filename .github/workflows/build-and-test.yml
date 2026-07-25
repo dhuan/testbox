@@ -30,17 +30,18 @@ jobs:
         with:
           toolchain: ${{ matrix.rustup_toolchain }}
 
+      - name: Install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+
       - name: Cargo build
         run: cargo build
 
       - name: Set up mock
         run: |
-          mkdir -p ~/bin
-          cd ~/bin
-          curl -L https://github.com/dhuan/mock/releases/download/v1.4.16/mock_v1.4.16_linux-386.tar.gz | tar xz
-          chmod u+x mock
-          cd -
-          PATH=${PATH}:~/bin sh -c 'make test'
+          mkdir -p "$HOME/bin"
+          GOBIN="$HOME/bin" go install github.com/dhuan/mock@v1.4.16
 
       - name: E2E test
-        run: PATH=${PATH}:~/bin sh -c 'make test'
+        run: PATH="${PATH}:${HOME}/bin" make test
