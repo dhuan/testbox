@@ -36,11 +36,9 @@ jobs:
       - name: Set up mock
         run: |
           mkdir -p ~/bin
-          cd ~/bin
-          curl -L https://github.com/dhuan/mock/releases/download/v1.4.16/mock_v1.4.16_linux-386.tar.gz | tar xz
-          chmod u+x mock
-          cd -
-          PATH=${PATH}:~/bin sh -c 'make test'
+          GOBIN="$HOME/bin" go install github.com/dhuan/mock@v1.4.16
+          echo "$HOME/bin" >> "$GITHUB_PATH"
+          "$HOME/bin/mock" version
 
       - name: E2E test
-        run: PATH=${PATH}:~/bin sh -c 'make test'
+        run: make test
