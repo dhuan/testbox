@@ -4,9 +4,6 @@ use std::io::Read;
 use std::os::unix::process::CommandExt;
 use std::process::{Child, Command};
 
-const ESRCH: i32 = 3;
-const SIGKILL: i32 = 9;
-
 pub fn add_func<F, A, R>(lua: &Lua, func_name: &str, func: F)
 where
     F: Fn(&Lua, A) -> LuaResult<R> + mlua::MaybeSend + 'static,
@@ -48,38 +45,8 @@ pub fn kill_processes_from(list: &mut VecDeque<Child>, start: usize) {
         let process_group_id = child.id() as i32;
         eprintln!("Terminating process group {}...", process_group_id);
 
-        if child
-            .try_wait()
-            .expect("Failed to check background process status.")
-            .is_some()
-        {
-            continue;
-        }
-
         if let Err(err) = kill_process_group(process_group_id) {
-            if err.raw_os_error() == Some(ESRCH) {
-                child.wait().expect("Failed to reap background process.");
-                continue;
-            }
-
-            if err.kind() == std::io::ErrorKind::PermissionDenied {
-                eprintln!(
-                    "Failed to kill process group {}: {err}. Trying the child process instead...",
-                    process_group_id
-                );
-
-                if let Err(child_err) = child.kill() {
-                    if child_err.kind() == std::io::ErrorKind::PermissionDenied {
-                        eprintln!(
-                            "Failed to kill child process {}: {child_err}. Skipping reap.",
-                            child.id()
-                        );
-                        continue;
-                    }
-
-                    panic!("Failed to kill child process {}: {child_err}", child.id());
-                }
-            } else {
+            if err.raw_os_error() != Some(3) {
                 panic!("Failed to kill process group {}: {err}", process_group_id);
             }
         }
@@ -89,7 +56,7 @@ pub fn kill_processes_from(list: &mut VecDeque<Child>, start: usize) {
 }
 
 fn kill_process_group(process_group_id: i32) -> std::io::Result<()> {
-    let result = unsafe { kill(-process_group_id, SIGKILL) };
+    let result = unsafe { kill(-process_group_id, 9) };
 
     if result == 0 {
         Ok(())
@@ -138,16 +105,5 @@ mod tests {
 
         let mut first = list.pop_back().unwrap();
         first.wait().expect("Failed to reap background process.");
-    }
-
-    #[test]
-    fn kill_processes_reaps_processes_that_exited_before_cleanup() {
-        let child = spawn_background_process("true").unwrap();
-        let mut list = VecDeque::from([child]);
-
-        std::thread::sleep(Duration::from_millis(50));
-        kill_processes(&mut list);
-
-        assert_eq!(list.len(), 0);
     }
 }
