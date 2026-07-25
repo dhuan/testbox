@@ -15,7 +15,11 @@ Request header some-header-key: %s
 ]]
 
 function serve_mock_and_request(fetch_options)
-    exec_bg(mock_server)
+    exec_bg(mock_server, {
+        wait = function(stdout, stderr)
+            return string.match(stderr, "Server started") ~= nil
+        end
+    })
 
     return fetch(fetch_options)
 end
