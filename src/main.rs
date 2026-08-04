@@ -146,7 +146,13 @@ fn main() {
         }
     }
 
-    crate::common::kill_processes(&mut ctx.clone().borrow_mut().process_list);
+    let mut process_list = ctx.borrow_mut().process_list.drain(..).collect();
+
+    crate::common::kill_processes(&mut process_list, &|msg| {
+        ctx.borrow().vprint(msg);
+    });
+
+    ctx.borrow_mut().process_list = process_list;
 
     if ctx.borrow().has_failed {
         failed = true;

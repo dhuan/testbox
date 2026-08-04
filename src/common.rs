@@ -36,17 +36,21 @@ pub fn spawn_background_process(command: &str) -> std::io::Result<Child> {
         .spawn()
 }
 
-pub fn kill_processes(list: &mut VecDeque<Child>) {
-    kill_processes_from(list, 0);
+pub fn kill_processes(list: &mut VecDeque<Child>, print: &dyn Fn(&str)) {
+    kill_processes_from(list, 0, print);
 }
 
-pub fn kill_processes_from(list: &mut VecDeque<Child>, start: usize) {
+pub fn kill_processes_from(list: &mut VecDeque<Child>, start: usize, print: &dyn Fn(&str)) {
     while list.len() > start {
         let Some(mut child) = list.pop_back() else {
             break;
         };
         let process_group_id = child.id() as i32;
-        eprintln!("Terminating process group {}...", process_group_id);
+
+        print(&format!(
+            "Terminating process group {}...",
+            process_group_id
+        ));
 
         if child
             .try_wait()

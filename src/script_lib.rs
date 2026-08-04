@@ -263,7 +263,8 @@ pub fn exec_bg(
     ctx: Rc<RefCell<LibContext>>,
 ) -> impl Fn(&Lua, (String, Option<LuaTable>)) -> LuaResult<LuaTable> {
     move |lua, (command, options)| {
-        eprintln!("Executing command: {}", command);
+        ctx.borrow()
+            .vprint(&format!("Executing command: {}", command));
 
         let options = options
             .map(|options| ExecBgOptions {
@@ -567,7 +568,13 @@ pub fn test(ctx: Rc<RefCell<LibContext>>) -> impl Fn(&Lua, (String, LuaFunction)
             let failed = frame.failed || own_error.is_some();
             let output = test_output(&test_name, depth, failed, own_error);
 
-            crate::common::kill_processes_from(&mut ctx.process_list, frame.process_start);
+            let mut process_list = ctx.process_list.drain(..).collect();
+
+            crate::common::kill_processes_from(&mut process_list, frame.process_start, &|msg| {
+                ctx.vprint(msg);
+            });
+
+            ctx.process_list = process_list.drain(..).collect();
 
             if failed {
                 ctx.has_failed = true;
