@@ -337,7 +337,8 @@ pub fn exec(
     ctx: Rc<RefCell<LibContext>>,
 ) -> impl Fn(&Lua, (String, Option<LuaTable>)) -> LuaResult<LuaTable> {
     move |lua, (command, options)| {
-        ctx.borrow().vprint(&format!("Executing command: {}", command));
+        ctx.borrow()
+            .vprint(&format!("Executing command: {}", command));
 
         let options = options
             .map(|options| ExecOptions {
