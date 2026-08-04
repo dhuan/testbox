@@ -15,6 +15,12 @@ fn main() {
     let matches = Command::new("testbox")
         .version(env!("CARGO_PKG_VERSION"))
         .about("Test runner with Lua scripts.")
+        .arg(
+            Arg::new("verbose")
+                .long("verbose")
+                .short('v')
+                .action(ArgAction::SetTrue),
+        )
         .arg(Arg::new("files").action(ArgAction::Append))
         .arg(Arg::new("test-filter").short('t'))
         .arg(Arg::new("test-filter-exact").short('T'))
@@ -81,6 +87,7 @@ fn main() {
         test_file_name: String::new(),
         test_file_header_printed: false,
         any_test_file_header_printed: false,
+        verbose_print_enabled: matches.get_flag("verbose"),
     }));
 
     add_func(&lua, "expect_equal", expect_equal(ctx.clone()));

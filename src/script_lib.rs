@@ -34,6 +34,17 @@ pub struct LibContext {
     pub test_file_name: String,
     pub test_file_header_printed: bool,
     pub any_test_file_header_printed: bool,
+    pub verbose_print_enabled: bool,
+}
+
+impl LibContext {
+    pub fn vprint(&self, msg: &str) {
+        if !self.verbose_print_enabled {
+            return;
+        }
+
+        eprintln!("{msg}");
+    }
 }
 
 pub struct TestFrame {
@@ -323,10 +334,10 @@ struct ExecOptions {
 }
 
 pub fn exec(
-    _ctx: Rc<RefCell<LibContext>>,
+    ctx: Rc<RefCell<LibContext>>,
 ) -> impl Fn(&Lua, (String, Option<LuaTable>)) -> LuaResult<LuaTable> {
     move |lua, (command, options)| {
-        eprintln!("Executing command: {}", command);
+        ctx.borrow().vprint(&format!("Executing command: {}", command));
 
         let options = options
             .map(|options| ExecOptions {
