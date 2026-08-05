@@ -567,14 +567,9 @@ pub fn test(ctx: Rc<RefCell<LibContext>>) -> impl Fn(&Lua, (String, LuaFunction)
             let frame = ctx.test_frames.pop().expect("test frame should exist");
             let failed = frame.failed || own_error.is_some();
             let output = test_output(&test_name, depth, failed, own_error);
+            let verbose = ctx.verbose_print_enabled;
 
-            let mut process_list = ctx.process_list.drain(..).collect();
-
-            crate::common::kill_processes_from(&mut process_list, frame.process_start, &|msg| {
-                ctx.vprint(msg);
-            });
-
-            ctx.process_list = process_list.drain(..).collect();
+            crate::common::kill_processes_from(&mut ctx.process_list, frame.process_start, verbose);
 
             if failed {
                 ctx.has_failed = true;
