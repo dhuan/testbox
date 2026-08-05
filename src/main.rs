@@ -19,7 +19,8 @@ fn main() {
             Arg::new("verbose")
                 .long("verbose")
                 .short('v')
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .help("Print to stderr useful debugging messages."),
         )
         .arg(Arg::new("files").action(ArgAction::Append))
         .arg(Arg::new("test-filter").short('t'))
