@@ -149,7 +149,7 @@ mod tests {
         let mut list = VecDeque::from([child]);
 
         std::thread::sleep(Duration::from_millis(50));
-        kill_processes(&mut list);
+        kill_processes(&mut list, true);
 
         assert_eq!(list.len(), 0);
     }
