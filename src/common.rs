@@ -36,17 +36,20 @@ pub fn spawn_background_process(command: &str) -> std::io::Result<Child> {
         .spawn()
 }
 
-pub fn kill_processes(list: &mut VecDeque<Child>) {
-    kill_processes_from(list, 0);
+pub fn kill_processes(list: &mut VecDeque<Child>, verbose: bool) {
+    kill_processes_from(list, 0, verbose);
 }
 
-pub fn kill_processes_from(list: &mut VecDeque<Child>, start: usize) {
+pub fn kill_processes_from(list: &mut VecDeque<Child>, start: usize, verbose: bool) {
     while list.len() > start {
         let Some(mut child) = list.pop_back() else {
             break;
         };
         let process_group_id = child.id() as i32;
-        eprintln!("Terminating process group {}...", process_group_id);
+
+        if verbose {
+            eprintln!("Terminating process group {}...", process_group_id);
+        }
 
         if child
             .try_wait()
@@ -113,7 +116,7 @@ mod tests {
         let process_group_id = child.id() as i32;
         let mut list = VecDeque::from([child]);
 
-        kill_processes(&mut list);
+        kill_processes(&mut list, true);
         std::thread::sleep(Duration::from_millis(50));
 
         let err = kill_process_group(process_group_id).unwrap_err();
@@ -128,7 +131,7 @@ mod tests {
         let second_process_group_id = second.id() as i32;
         let mut list = VecDeque::from([first, second]);
 
-        kill_processes_from(&mut list, 1);
+        kill_processes_from(&mut list, 1, true);
         std::thread::sleep(Duration::from_millis(50));
 
         assert_eq!(list.len(), 1);
@@ -146,7 +149,7 @@ mod tests {
         let mut list = VecDeque::from([child]);
 
         std::thread::sleep(Duration::from_millis(50));
-        kill_processes(&mut list);
+        kill_processes(&mut list, true);
 
         assert_eq!(list.len(), 0);
     }

@@ -34,6 +34,7 @@ pub struct LibContext {
     pub test_file_name: String,
     pub test_file_header_printed: bool,
     pub any_test_file_header_printed: bool,
+    pub verbose_print_enabled: bool,
 }
 
 pub struct TestFrame {
@@ -252,7 +253,9 @@ pub fn exec_bg(
     ctx: Rc<RefCell<LibContext>>,
 ) -> impl Fn(&Lua, (String, Option<LuaTable>)) -> LuaResult<LuaTable> {
     move |lua, (command, options)| {
-        eprintln!("Executing command: {}", command);
+        if ctx.borrow().verbose_print_enabled {
+            eprintln!("Executing command: {}", command)
+        }
 
         let options = options
             .map(|options| ExecBgOptions {
@@ -323,10 +326,12 @@ struct ExecOptions {
 }
 
 pub fn exec(
-    _ctx: Rc<RefCell<LibContext>>,
+    ctx: Rc<RefCell<LibContext>>,
 ) -> impl Fn(&Lua, (String, Option<LuaTable>)) -> LuaResult<LuaTable> {
     move |lua, (command, options)| {
-        eprintln!("Executing command: {}", command);
+        if ctx.borrow().verbose_print_enabled {
+            eprintln!("Executing command: {}", command);
+        }
 
         let options = options
             .map(|options| ExecOptions {
@@ -554,8 +559,9 @@ pub fn test(ctx: Rc<RefCell<LibContext>>) -> impl Fn(&Lua, (String, LuaFunction)
             let frame = ctx.test_frames.pop().expect("test frame should exist");
             let failed = frame.failed || own_error.is_some();
             let output = test_output(&test_name, depth, failed, own_error);
+            let verbose = ctx.verbose_print_enabled;
 
-            crate::common::kill_processes_from(&mut ctx.process_list, frame.process_start);
+            crate::common::kill_processes_from(&mut ctx.process_list, frame.process_start, verbose);
 
             if failed {
                 ctx.has_failed = true;

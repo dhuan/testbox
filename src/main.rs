@@ -15,6 +15,13 @@ fn main() {
     let matches = Command::new("testbox")
         .version(env!("CARGO_PKG_VERSION"))
         .about("Test runner with Lua scripts.")
+        .arg(
+            Arg::new("verbose")
+                .long("verbose")
+                .short('v')
+                .action(ArgAction::SetTrue)
+                .help("Print to stderr useful debugging messages."),
+        )
         .arg(Arg::new("files").action(ArgAction::Append))
         .arg(Arg::new("test-filter").short('t'))
         .arg(Arg::new("test-filter-exact").short('T'))
@@ -71,6 +78,8 @@ fn main() {
         }
     }
 
+    let verbose_print_enabled = matches.get_flag("verbose");
+
     let ctx = Rc::new(RefCell::new(LibContext {
         process_list: VecDeque::new(),
         test_frames: Vec::new(),
@@ -81,6 +90,7 @@ fn main() {
         test_file_name: String::new(),
         test_file_header_printed: false,
         any_test_file_header_printed: false,
+        verbose_print_enabled,
     }));
 
     add_func(&lua, "expect_equal", expect_equal(ctx.clone()));
@@ -139,7 +149,7 @@ fn main() {
         }
     }
 
-    crate::common::kill_processes(&mut ctx.clone().borrow_mut().process_list);
+    crate::common::kill_processes(&mut ctx.borrow_mut().process_list, verbose_print_enabled);
 
     if ctx.borrow().has_failed {
         failed = true;
