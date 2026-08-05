@@ -37,16 +37,6 @@ pub struct LibContext {
     pub verbose_print_enabled: bool,
 }
 
-impl LibContext {
-    pub fn vprint(&self, msg: &str) {
-        if !self.verbose_print_enabled {
-            return;
-        }
-
-        eprintln!("{msg}");
-    }
-}
-
 pub struct TestFrame {
     test_name: String,
     depth: usize,
@@ -263,8 +253,9 @@ pub fn exec_bg(
     ctx: Rc<RefCell<LibContext>>,
 ) -> impl Fn(&Lua, (String, Option<LuaTable>)) -> LuaResult<LuaTable> {
     move |lua, (command, options)| {
-        ctx.borrow()
-            .vprint(&format!("Executing command: {}", command));
+        if ctx.borrow().verbose_print_enabled {
+            eprintln!("Executing command: {}", command)
+        }
 
         let options = options
             .map(|options| ExecBgOptions {
@@ -338,8 +329,9 @@ pub fn exec(
     ctx: Rc<RefCell<LibContext>>,
 ) -> impl Fn(&Lua, (String, Option<LuaTable>)) -> LuaResult<LuaTable> {
     move |lua, (command, options)| {
-        ctx.borrow()
-            .vprint(&format!("Executing command: {}", command));
+        if ctx.borrow().verbose_print_enabled {
+            eprintln!("Executing command: {}", command);
+        }
 
         let options = options
             .map(|options| ExecOptions {
