@@ -77,6 +77,8 @@ fn main() {
         }
     }
 
+    let verbose_print_enabled = matches.get_flag("verbose");
+
     let ctx = Rc::new(RefCell::new(LibContext {
         process_list: VecDeque::new(),
         test_frames: Vec::new(),
@@ -87,7 +89,7 @@ fn main() {
         test_file_name: String::new(),
         test_file_header_printed: false,
         any_test_file_header_printed: false,
-        verbose_print_enabled: matches.get_flag("verbose"),
+        verbose_print_enabled,
     }));
 
     add_func(&lua, "expect_equal", expect_equal(ctx.clone()));
@@ -146,10 +148,7 @@ fn main() {
         }
     }
 
-    crate::common::kill_processes(
-        &mut ctx.borrow_mut().process_list,
-        ctx.borrow().verbose_print_enabled,
-    );
+    crate::common::kill_processes(&mut ctx.borrow_mut().process_list, verbose_print_enabled);
 
     if ctx.borrow().has_failed {
         failed = true;
