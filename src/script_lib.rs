@@ -799,10 +799,40 @@ fn match_partial_value(actual: &Value, expected: &Value, path: &str) -> Option<S
 
 pub fn json_encode(_ctx: Rc<RefCell<LibContext>>) -> impl Fn(&Lua, LuaTable) -> LuaResult<String> {
     move |lua, value| {
-        let json_value: serde_json::Value = lua.from_value(LuaValue::Table(value))?;
+        let mut json_value: serde_json::Value = lua.from_value(LuaValue::Table(value))?;
+
+        value_map(&mut json_value, &|value| {
+            if let Some(s) = value.as_str() {
+                if s == "_TESTBOX_EMPTY_ARRAY_" {
+                    return serde_json::Value::Array(vec![]);
+                }
+            }
+
+            value
+        });
 
         Ok(serde_json::to_string(&json_value).unwrap())
     }
+}
+
+fn value_map<F: Fn(serde_json::Value) -> serde_json::Value>(value: &mut serde_json::Value, f: &F) {
+    if let Some(arr) = value.as_array_mut() {
+        for i in 0..arr.len() {
+            value_map(arr.get_mut(i).unwrap(), f);
+        }
+
+        return;
+    }
+
+    if let Some(obj) = value.as_object_mut() {
+        for (_, value) in obj.iter_mut() {
+            value_map(value, f);
+        }
+
+        return;
+    }
+
+    *value = f(value.clone());
 }
 
 pub fn json_decode(_ctx: Rc<RefCell<LibContext>>) -> impl Fn(&Lua, String) -> LuaResult<LuaValue> {
