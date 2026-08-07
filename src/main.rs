@@ -93,7 +93,9 @@ fn main() {
         verbose_print_enabled,
     }));
 
-    lua.globals().set("EMPTY_ARRAY", "_TESTBOX_EMPTY_ARRAY_").unwrap();
+    lua.globals()
+        .set("EMPTY_ARRAY", "_TESTBOX_EMPTY_ARRAY_")
+        .unwrap();
 
     add_func(&lua, "expect_equal", expect_equal(ctx.clone()));
     add_func(&lua, "expect_match", expect_match(ctx.clone()));
