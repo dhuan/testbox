@@ -127,7 +127,11 @@ Encodes a Lua table as a JSON string.
     local body = json_encode({
         name = "Ada",
         active = true,
+        tags = EMPTY_ARRAY,
     })
+
+Use ``EMPTY_ARRAY`` when a field should encode as ``[]``. A plain empty Lua
+table still encodes as ``{}``.
 
 
 json_decode

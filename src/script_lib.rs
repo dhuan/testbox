@@ -3,6 +3,7 @@ use rand::distr::{Alphanumeric, SampleString};
 use reqwest::header::HeaderMap;
 use serde_json::Value;
 use std::cell::RefCell;
+use std::collections::HashSet;
 use std::collections::{HashMap, VecDeque};
 use std::os::raw::c_void;
 use std::rc::Rc;
@@ -43,6 +44,12 @@ pub struct TestFrame {
     started: bool,
     failed: bool,
     process_start: usize,
+}
+
+static EMPTY_ARRAY_MARKER: u8 = 0;
+
+pub fn empty_array_marker() -> LuaLightUserData {
+    LuaLightUserData(&EMPTY_ARRAY_MARKER as *const u8 as *mut c_void)
 }
 
 fn flush_stdout() {
@@ -797,12 +804,66 @@ fn match_partial_value(actual: &Value, expected: &Value, path: &str) -> Option<S
     }
 }
 
-pub fn json_encode(_ctx: Rc<RefCell<LibContext>>) -> impl Fn(&Lua, LuaTable) -> LuaResult<String> {
+pub fn json_encode(_ctx: Rc<RefCell<LibContext>>) -> impl Fn(&Lua, LuaValue) -> LuaResult<String> {
     move |lua, value| {
-        let json_value: serde_json::Value = lua.from_value(LuaValue::Table(value))?;
+        let value = normalize_json_encode_value(lua, value, &mut HashSet::new())?;
+        let json_value: serde_json::Value = lua.from_value(value)?;
 
         Ok(serde_json::to_string(&json_value).unwrap())
     }
+}
+
+fn normalize_json_encode_value(
+    lua: &Lua,
+    value: LuaValue,
+    visited_tables: &mut HashSet<*const c_void>,
+) -> LuaResult<LuaValue> {
+    match value {
+        LuaValue::LightUserData(value) if value == empty_array_marker() => {
+            let table = lua.create_table()?;
+            table.set_metatable(Some(lua.array_metatable()))?;
+
+            Ok(LuaValue::Table(table))
+        }
+        LuaValue::Table(table) => normalize_json_encode_table(lua, table, visited_tables),
+        value => Ok(value),
+    }
+}
+
+fn normalize_json_encode_table(
+    lua: &Lua,
+    table: LuaTable,
+    visited_tables: &mut HashSet<*const c_void>,
+) -> LuaResult<LuaValue> {
+    let table_pointer = table.to_pointer();
+    if !visited_tables.insert(table_pointer) {
+        return Err(LuaError::RuntimeError(
+            "recursive tables cannot be json encoded".to_string(),
+        ));
+    }
+
+    let normalized_table = lua.create_table()?;
+    if has_array_metatable(lua, &table) {
+        normalized_table.set_metatable(Some(lua.array_metatable()))?;
+    }
+
+    for pair in table.pairs::<LuaValue, LuaValue>() {
+        let (key, value) = pair?;
+        normalized_table.set(
+            key,
+            normalize_json_encode_value(lua, value, visited_tables)?,
+        )?;
+    }
+
+    visited_tables.remove(&table_pointer);
+
+    Ok(LuaValue::Table(normalized_table))
+}
+
+fn has_array_metatable(lua: &Lua, table: &LuaTable) -> bool {
+    table
+        .metatable()
+        .is_some_and(|metatable| metatable.to_pointer() == lua.array_metatable().to_pointer())
 }
 
 pub fn json_decode(_ctx: Rc<RefCell<LibContext>>) -> impl Fn(&Lua, String) -> LuaResult<LuaValue> {
