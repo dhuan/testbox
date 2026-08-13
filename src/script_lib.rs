@@ -82,6 +82,7 @@ impl LibContext {
 struct ExecBgOptions {
     wait: Option<LuaFunction>,
     save_output_as: Option<String>,
+    env: HashMap<String, String>,
 }
 
 enum WaitProcessError {
@@ -265,13 +266,18 @@ pub fn exec_bg(
         }
 
         let options = options
-            .map(|options| ExecBgOptions {
-                wait: options.get("wait").ok(),
-                save_output_as: options.get("save_output_as").ok(),
+            .map(|options| {
+                Ok::<ExecBgOptions, LuaError>(ExecBgOptions {
+                    wait: options.get("wait").ok(),
+                    save_output_as: options.get("save_output_as").ok(),
+                    env: parse_env_option(&options)?,
+                })
             })
+            .transpose()?
             .unwrap_or(ExecBgOptions {
                 wait: None,
                 save_output_as: None,
+                env: HashMap::new(),
             });
 
         let save_output = match options.save_output_as {
@@ -279,7 +285,7 @@ pub fn exec_bg(
             None => None,
         };
 
-        let mut process = crate::common::spawn_background_process(&command).unwrap();
+        let mut process = crate::common::spawn_background_process(&command, Some(&options.env))?;
 
         let result: Result<(Option<String>, Option<String>), LuaError> = if let Some(wait) =
             options.wait
@@ -330,6 +336,7 @@ struct ExecResult {
 
 struct ExecOptions {
     stdin: Option<String>,
+    env: HashMap<String, String>,
 }
 
 pub fn exec(
@@ -341,13 +348,21 @@ pub fn exec(
         }
 
         let options = options
-            .map(|options| ExecOptions {
-                stdin: options.get("stdin").ok(),
+            .map(|options| {
+                Ok::<ExecOptions, LuaError>(ExecOptions {
+                    stdin: options.get("stdin").ok(),
+                    env: parse_env_option(&options)?,
+                })
             })
-            .unwrap_or(ExecOptions { stdin: None });
+            .transpose()?
+            .unwrap_or(ExecOptions {
+                stdin: None,
+                env: HashMap::new(),
+            });
 
-        let mut command_builder = std::process::Command::new("sh");
+        let mut command_builder = std::process::Command::new("/bin/sh");
         command_builder.arg("-c").arg(command);
+        command_builder.envs(options.env);
 
         if options.stdin.is_some() {
             command_builder.stdin(std::process::Stdio::piped());
@@ -395,6 +410,42 @@ pub fn exec(
 
         LuaResult::Ok(result_lua)
     }
+}
+
+fn parse_env_option(options: &LuaTable) -> LuaResult<HashMap<String, String>> {
+    let env_value: LuaValue = options.get("env")?;
+
+    let env_table = match env_value {
+        LuaValue::Nil => return Ok(HashMap::new()),
+        LuaValue::Table(table) => table,
+        _ => {
+            return Err(LuaError::RuntimeError(
+                "env must be a table of string keys and string values".to_string(),
+            ));
+        }
+    };
+
+    let mut env = HashMap::new();
+
+    for pair in env_table.pairs::<LuaValue, LuaValue>() {
+        let (key, value) = pair?;
+
+        let LuaValue::String(key) = key else {
+            return Err(LuaError::RuntimeError(
+                "env keys must be strings".to_string(),
+            ));
+        };
+
+        let LuaValue::String(value) = value else {
+            return Err(LuaError::RuntimeError(
+                "env values must be strings".to_string(),
+            ));
+        };
+
+        env.insert(key.to_str()?.to_string(), value.to_str()?.to_string());
+    }
+
+    Ok(env)
 }
 
 trait OutputWithStdin {
