@@ -64,7 +64,7 @@ The returned object is structured as follows:
    stdout: A string containing output captured from stdout.
    stderr: A string containing output captured from stderr.
 
-Like `exec <lib_exec_>`, `exec_bg` can receive environment variables through the options object.
+Like `exec <lib_exec_>`_, `exec_bg` can receive environment variables through the options object.
 
 fetch
 =====
