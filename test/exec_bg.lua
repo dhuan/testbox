@@ -2,6 +2,7 @@
 📁 exec_bg.lua
 ✅ exec_bg: wait for text
 ✅ exec_bg: saving output
+✅ exec_bg: env
 END EXPECTED OUTPUT --]]
 
 local function read_file(path)
@@ -74,4 +75,19 @@ echo three
     expect_equal(string.match(saved_output, "two") ~= nil, true)
     expect_equal(string.match(saved_output, "error") ~= nil, true)
     expect_equal(string.match(saved_output, "three") ~= nil, true)
+end)
+
+test("exec_bg: env", function()
+    local exec_result = exec_bg([[
+echo "$TESTBOX_BG_ENV"
+]], {
+        env = {
+            TESTBOX_BG_ENV = "background",
+        },
+        wait = function(stdout, stderr)
+            return string.match(stdout, "background") ~= nil
+        end
+    })
+
+    expect_equal(exec_result.stdout, "background\n")
 end)

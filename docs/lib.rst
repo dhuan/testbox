@@ -29,6 +29,14 @@ The returned object is structured as follows:
    stderr: A string containing the output from stderr.
    status: The exit status code from the executed command.
 
+Environment variables can be passed to the command environment using the ``env`` options parameter:
+
+.. code::
+
+    expect_equal(
+        exec([[echo "FOO=$FOO"]], { env = { FOO = "BAR" } }).stdout,
+        "FOO=BAR"
+    )
 
 exec_bg
 =======
@@ -55,6 +63,18 @@ The returned object is structured as follows:
    stdout: A string containing output captured from stdout.
    stderr: A string containing output captured from stderr.
 
+Like `exec <exec_>`_, ``exec_bg`` can receive environment variables through the options object.
+
+.. code::
+
+    local server = exec_bg("npm run dev", {
+        env = {
+            PORT = "3001",
+        },
+        wait = function(stdout, stderr)
+            return string.match(stdout, "Server is ready") ~= nil
+        end
+    })
 
 fetch
 =====

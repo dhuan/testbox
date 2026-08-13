@@ -1,4 +1,5 @@
 use mlua::prelude::*;
+use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::io::Read;
 use std::os::unix::process::CommandExt;
@@ -26,14 +27,23 @@ pub fn stdin() -> Option<String> {
     Some(stdin_buffer)
 }
 
-pub fn spawn_background_process(command: &str) -> std::io::Result<Child> {
-    Command::new("sh")
+pub fn spawn_background_process(
+    command: &str,
+    env: Option<&HashMap<String, String>>,
+) -> std::io::Result<Child> {
+    let mut command_builder = Command::new("/bin/sh");
+    command_builder
         .arg("-c")
         .arg(command)
         .process_group(0)
         .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .spawn()
+        .stderr(std::process::Stdio::piped());
+
+    if let Some(env) = env {
+        command_builder.envs(env);
+    }
+
+    command_builder.spawn()
 }
 
 pub fn kill_processes(list: &mut VecDeque<Child>, verbose: bool) {
@@ -112,7 +122,7 @@ mod tests {
 
     #[test]
     fn kill_processes_terminates_shell_children_in_the_same_group() {
-        let child = spawn_background_process("sleep 1000 >&2").unwrap();
+        let child = spawn_background_process("sleep 1000 >&2", None).unwrap();
         let process_group_id = child.id() as i32;
         let mut list = VecDeque::from([child]);
 
@@ -125,9 +135,9 @@ mod tests {
 
     #[test]
     fn kill_processes_from_keeps_earlier_processes() {
-        let first = spawn_background_process("sleep 1000 >&2").unwrap();
+        let first = spawn_background_process("sleep 1000 >&2", None).unwrap();
         let first_process_group_id = first.id() as i32;
-        let second = spawn_background_process("sleep 1000 >&2").unwrap();
+        let second = spawn_background_process("sleep 1000 >&2", None).unwrap();
         let second_process_group_id = second.id() as i32;
         let mut list = VecDeque::from([first, second]);
 
@@ -145,7 +155,7 @@ mod tests {
 
     #[test]
     fn kill_processes_reaps_processes_that_exited_before_cleanup() {
-        let child = spawn_background_process("true").unwrap();
+        let child = spawn_background_process("true", None).unwrap();
         let mut list = VecDeque::from([child]);
 
         std::thread::sleep(Duration::from_millis(50));
