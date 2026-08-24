@@ -2,6 +2,15 @@
 name = "testbox"
 version = "0.1.0"
 edition = "2024"
+rust-version = "1.90"
+description = "A fast test runner that works out of the box with zero dependencies."
+readme = "README.md"
+license = "MIT"
+repository = "https://github.com/dhuan/testbox"
+homepage = "https://github.com/dhuan/testbox"
+keywords = ["test", "automation"]
+categories = ["command-line-utilities", "development-tools::testing"]
+exclude = ["/docs"]
 
 [dependencies]
 clap = { version = "4.6.5", features = ["derive", "unstable-doc"] }
