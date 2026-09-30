@@ -35,10 +35,6 @@ jobs:
             runner: macos-15
             target: aarch64-apple-darwin
             binary_ext: ""
-          - name: windows-x86_64
-            runner: windows-latest
-            target: x86_64-pc-windows-msvc
-            binary_ext: .exe
 
     steps:
       - uses: actions/checkout@v5
@@ -56,11 +52,6 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y upx-ucl
-
-      - name: Install UPX on Windows
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: choco install upx -y
 
       - name: Build release binary
         run: cargo build --locked --release --target ${{ matrix.target }} --bin ${{ env.BINARY_NAME }}
@@ -108,7 +99,6 @@ jobs:
           tar -C dist/raw/binary-x86_64-unknown-linux-gnu -czf "dist/release/${BINARY_NAME}-${version}-x86_64-unknown-linux-gnu.tgz" "${BINARY_NAME}"
           tar -C dist/raw/binary-x86_64-apple-darwin -czf "dist/release/${BINARY_NAME}-${version}-x86_64-apple-darwin.tgz" "${BINARY_NAME}"
           tar -C dist/raw/binary-aarch64-apple-darwin -czf "dist/release/${BINARY_NAME}-${version}-aarch64-apple-darwin.tgz" "${BINARY_NAME}"
-          tar -C dist/raw/binary-x86_64-pc-windows-msvc -czf "dist/release/${BINARY_NAME}-${version}-x86_64-pc-windows-msvc.tgz" "${BINARY_NAME}.exe"
 
           (
             cd dist/release
