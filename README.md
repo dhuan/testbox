@@ -77,7 +77,8 @@ EOF
 
 ## Test Library
 
-In the examples above you may've noticed some functions were used that assist you in writing tests, such as *exec_bg* and *fetch*. These functions all belong to the [Testbox Library which you can read more about.](docs/lib.rst)
+The examples above use helper functions such as *exec_bg* and *fetch*. These
+functions are part of the Testbox Library, [which you can learn more about here.](docs/lib.rst)
 
 ## License
 
