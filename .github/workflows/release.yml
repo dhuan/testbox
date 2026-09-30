@@ -1,0 +1,123 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  BINARY_NAME: testbox
+
+jobs:
+  build:
+    name: Build ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-x86_64
+            runner: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            binary_ext: ""
+          - name: macos-x86_64
+            runner: macos-15-intel
+            target: x86_64-apple-darwin
+            binary_ext: ""
+          - name: macos-aarch64
+            runner: macos-15
+            target: aarch64-apple-darwin
+            binary_ext: ""
+          - name: windows-x86_64
+            runner: windows-latest
+            target: x86_64-pc-windows-msvc
+            binary_ext: .exe
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          target: ${{ matrix.target }}
+
+      - name: Cache cargo artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install UPX on Linux
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y upx-ucl
+
+      - name: Install UPX on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: choco install upx -y
+
+      - name: Build release binary
+        run: cargo build --locked --release --target ${{ matrix.target }} --bin ${{ env.BINARY_NAME }}
+
+      - name: Compress binary with UPX
+        if: runner.os != 'macOS'
+        shell: bash
+        run: upx --best --lzma "target/${{ matrix.target }}/release/${{ env.BINARY_NAME }}${{ matrix.binary_ext }}"
+
+      - name: Stage binary artifact
+        shell: bash
+        run: |
+          mkdir -p dist/${{ matrix.target }}
+          cp target/${{ matrix.target }}/release/${{ env.BINARY_NAME }}${{ matrix.binary_ext }} dist/${{ matrix.target }}/
+
+      - name: Upload staged binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: binary-${{ matrix.target }}
+          path: dist/${{ matrix.target }}/${{ env.BINARY_NAME }}${{ matrix.binary_ext }}
+          if-no-files-found: error
+
+  release:
+    name: Publish release
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist/raw
+
+      - name: Package release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          version="${GITHUB_REF_NAME}"
+          mkdir -p dist/release
+
+          chmod +x dist/raw/binary-x86_64-unknown-linux-gnu/${BINARY_NAME}
+          chmod +x dist/raw/binary-x86_64-apple-darwin/${BINARY_NAME}
+          chmod +x dist/raw/binary-aarch64-apple-darwin/${BINARY_NAME}
+
+          tar -C dist/raw/binary-x86_64-unknown-linux-gnu -czf "dist/release/${BINARY_NAME}-${version}-x86_64-unknown-linux-gnu.tgz" "${BINARY_NAME}"
+          tar -C dist/raw/binary-x86_64-apple-darwin -czf "dist/release/${BINARY_NAME}-${version}-x86_64-apple-darwin.tgz" "${BINARY_NAME}"
+          tar -C dist/raw/binary-aarch64-apple-darwin -czf "dist/release/${BINARY_NAME}-${version}-aarch64-apple-darwin.tgz" "${BINARY_NAME}"
+          tar -C dist/raw/binary-x86_64-pc-windows-msvc -czf "dist/release/${BINARY_NAME}-${version}-x86_64-pc-windows-msvc.tgz" "${BINARY_NAME}.exe"
+
+          (
+            cd dist/release
+            sha256sum * > SHA256SUMS.txt
+          )
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v3
+        with:
+          generate_release_notes: true
+          files: |
+            dist/release/*
