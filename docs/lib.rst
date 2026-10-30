@@ -153,6 +153,15 @@ Encodes a Lua table as a JSON string.
 Use ``EMPTY_ARRAY`` when a field should encode as ``[]``. A plain empty Lua
 table still encodes as ``{}``.
 
+Lua removes fields assigned ``nil``, so use ``JSON_NULL`` to encode a JSON null:
+
+.. code::
+
+    json_encode({ foo = JSON_NULL }) -- {"foo":null}
+
+``json_decode`` also returns ``JSON_NULL`` for JSON null values, including
+values nested in objects and arrays.
+
 
 json_decode
 ===========
@@ -165,6 +174,9 @@ Decodes a JSON string into Lua values.
 
     expect_equal("Ada", payload.name)
     expect_equal(true, payload.active)
+
+JSON null values are represented by ``JSON_NULL`` so they remain present in
+Lua tables.
 
 
 random_chars

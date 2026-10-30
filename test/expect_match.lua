@@ -2,6 +2,7 @@
 📁 Assertion matching
 ✅ expect_match matches partial object fields
 ✅ expect_match matches nested object fields partially
+✅ expect_match matches JSON null fields
 ✅ expect_match rejects top-level scalars
 ❌ expect_match reports changed field values
 Not matching!
@@ -37,6 +38,15 @@ test("expect_match matches nested object fields partially", function()
         nested = {
             label = "one",
         },
+    })
+end)
+
+test("expect_match matches JSON null fields", function()
+    local actual = json_decode([[{"foo":"bar","some_null_value":null}]])
+
+    expect_match(actual, {
+        foo = "bar",
+        some_null_value = JSON_NULL,
     })
 end)
 
