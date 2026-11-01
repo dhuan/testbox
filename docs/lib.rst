@@ -209,3 +209,18 @@ same key.
     })
 
     expect_equal("POST", options.method)
+
+interpolate
+===========
+
+Replaces placeholders in a string with their corresponding values from the provided variables object.
+
+.. code::
+
+    expect_equal(
+        "My name is joe, I'm 200 years old.",
+        interpolate("My name is {name}, I'm {age} years old.", {
+            name = "joe",
+            age = 200,
+        })
+    )

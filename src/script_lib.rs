@@ -956,6 +956,41 @@ pub fn merge_table(
     }
 }
 
+pub fn interpolate(
+    _ctx: Rc<RefCell<LibContext>>,
+) -> impl Fn(&Lua, (String, LuaTable)) -> LuaResult<String> {
+    move |lua, (input, variables)| {
+        let tostring: LuaFunction = lua.globals().get("tostring")?;
+        let mut output = String::with_capacity(input.len());
+        let mut remaining = input.as_str();
+
+        while let Some(open_brace) = remaining.find('{') {
+            output.push_str(&remaining[..open_brace]);
+            let after_open_brace = &remaining[open_brace + 1..];
+            let Some(close_brace) = after_open_brace.find('}') else {
+                output.push_str(&remaining[open_brace..]);
+                remaining = "";
+                break;
+            };
+
+            let key = &after_open_brace[..close_brace];
+            let value = variables.get::<LuaValue>(key)?;
+            if value.is_nil() {
+                output.push('{');
+                output.push_str(key);
+                output.push('}');
+            } else {
+                output.push_str(&tostring.call::<String>(value)?);
+            }
+
+            remaining = &after_open_brace[close_brace + 1..];
+        }
+
+        output.push_str(remaining);
+        Ok(output)
+    }
+}
+
 pub fn copy_table(_ctx: Rc<RefCell<LibContext>>) -> impl Fn(&Lua, LuaTable) -> LuaResult<LuaTable> {
     move |lua, value| {
         let mut visited = HashMap::new();
