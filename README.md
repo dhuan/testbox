@@ -75,6 +75,33 @@ end)
 EOF
 ```
 
+### Preludes that supply utilities
+
+Use the `-p` or `--prelude` to insert a lua file that is executed before the
+test scripts.
+
+```sh
+TMP=$(mktemp)
+
+cat <<EOF > ${TMP}
+function sum(a, b)
+    return a + b
+end
+EOF
+
+testbox -p "${TMP}" - <<EOF
+test("summing numbers", function()
+    expect_equal(
+        sum(1, 2),
+        3,
+    )
+end)
+EOF
+```
+
+Multiple prelude files is also supported - the `-p` flag can be used multiple
+times for different files.
+
 ## Test Library
 
 The examples above use helper functions such as *exec_bg* and *fetch*. These
