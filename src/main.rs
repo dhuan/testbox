@@ -65,19 +65,6 @@ fn main() {
         None
     };
 
-    if let Some(prelude_file) = matches.get_one::<String>("prelude") {
-        let prelude_file_content = std::fs::read_to_string(prelude_file).expect(&format!(
-            r#"Failed to load prelude file "{}""#,
-            prelude_file
-        ));
-
-        if let Err(err) = lua.load(prelude_file_content).exec() {
-            eprintln!("{}", err.to_string());
-
-            std::process::exit(1);
-        }
-    }
-
     let verbose_print_enabled = matches.get_flag("verbose");
 
     let ctx = Rc::new(RefCell::new(LibContext {
