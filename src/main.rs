@@ -25,7 +25,7 @@ fn main() {
         .arg(Arg::new("files").action(ArgAction::Append))
         .arg(Arg::new("test-filter").short('t'))
         .arg(Arg::new("test-filter-exact").short('T'))
-        .arg(Arg::new("prelude").short('p'))
+        .arg(Arg::new("prelude").long("prelude").short('p'))
         .arg(
             Arg::new("fail-fast")
                 .long("fail-fast")
