@@ -25,7 +25,12 @@ fn main() {
         .arg(Arg::new("files").action(ArgAction::Append))
         .arg(Arg::new("test-filter").short('t'))
         .arg(Arg::new("test-filter-exact").short('T'))
-        .arg(Arg::new("prelude").long("prelude").short('p'))
+        .arg(
+            Arg::new("prelude")
+                .long("prelude")
+                .short('p')
+                .action(ArgAction::Append),
+        )
         .arg(
             Arg::new("fail-fast")
                 .long("fail-fast")
@@ -56,13 +61,22 @@ fn main() {
 
     let lua = Lua::new();
 
-    let prelude = if let Some(prelude_file) = matches.get_one::<String>("prelude") {
-        Some(std::fs::read_to_string(prelude_file).expect(&format!(
-            r#"Failed to load prelude file "{}""#,
-            prelude_file
-        )))
-    } else {
-        None
+    let prelude_files: Vec<_> = matches
+        .get_many::<String>("prelude")
+        .unwrap_or_default()
+        .collect();
+
+    let prelude = {
+        let mut prelude: Vec<String> = vec![];
+
+        for prelude_file in prelude_files {
+            prelude.push(std::fs::read_to_string(prelude_file).expect(&format!(
+                r#"Failed to load prelude file "{}""#,
+                prelude_file
+            )));
+        }
+
+        prelude.join("\n")
     };
 
     let verbose_print_enabled = matches.get_flag("verbose");
@@ -121,14 +135,7 @@ fn main() {
         ctx.borrow_mut()
             .set_test_file_name(test_file_name(test_file, &script));
 
-        if let Err(err) = lua
-            .load(format!(
-                "{}\n{}",
-                prelude.clone().unwrap_or_default(),
-                script
-            ))
-            .exec()
-        {
+        if let Err(err) = lua.load(format!("{}\n{}", prelude, script)).exec() {
             if !ctx.borrow().stop_requested {
                 eprintln!("{}", err.to_string());
                 failed = true;
