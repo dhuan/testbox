@@ -6,6 +6,7 @@ use std::cell::RefCell;
 use std::collections::HashSet;
 use std::collections::{HashMap, VecDeque};
 use std::os::raw::c_void;
+use std::path::{Component, Path, PathBuf};
 use std::rc::Rc;
 use std::{
     io::prelude::*,
@@ -996,6 +997,288 @@ pub fn copy_table(_ctx: Rc<RefCell<LibContext>>) -> impl Fn(&Lua, LuaTable) -> L
         let mut visited = HashMap::new();
         copy_lua_table(lua, value, &mut visited)
     }
+}
+
+const ERR_FILE_DOES_NOT_EXIST: &str = "ERR_FILE_DOES_NOT_EXIST";
+const ERR_NOT_A_FILE: &str = "ERR_NOT_A_FILE";
+const ERR_DIR_DOES_NOT_EXIST: &str = "ERR_DIR_DOES_NOT_EXIST";
+const ERR_NOT_A_DIR: &str = "ERR_NOT_A_DIR";
+const ERR_INVALID_SORT_OPTION: &str = "ERR_INVALID_SORT_OPTION";
+const ERR_SYMLINK_NOT_SUPPORTED: &str = "ERR_SYMLINK_NOT_SUPPORTED";
+
+pub fn fs_module(lua: &Lua) -> LuaResult<LuaTable> {
+    let fs = lua.create_table()?;
+    fs.set("read_to_string", lua.create_function(fs_read_to_string)?)?;
+    fs.set("read_dir", lua.create_function(fs_read_dir)?)?;
+    fs.set("create_file", lua.create_function(fs_create_file)?)?;
+    fs.set("create_dir", lua.create_function(fs_create_dir)?)?;
+    Ok(fs)
+}
+
+fn fs_read_to_string(_: &Lua, path: String) -> LuaResult<String> {
+    reject_symlink_components(Path::new(&path))?;
+
+    let metadata = match std::fs::metadata(&path) {
+        Ok(metadata) => metadata,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            return Err(fs_error(ERR_FILE_DOES_NOT_EXIST));
+        }
+        Err(err) => return Err(fs_io_error(err)),
+    };
+
+    if !metadata.is_file() {
+        return Err(fs_error(ERR_NOT_A_FILE));
+    }
+
+    std::fs::read_to_string(path).map_err(fs_io_error)
+}
+
+#[derive(Clone, Copy)]
+enum ReadDirSort {
+    Alphabetic,
+    Numeric,
+}
+
+fn fs_read_dir(_: &Lua, (path, options): (String, Option<LuaTable>)) -> LuaResult<LuaTable> {
+    let sort = match options
+        .map(|options| options.get::<Option<String>>("sort"))
+        .transpose()?
+    {
+        None | Some(None) => ReadDirSort::Alphabetic,
+        Some(Some(sort)) if sort == "alphabetic" => ReadDirSort::Alphabetic,
+        Some(Some(sort)) if sort == "numeric" => ReadDirSort::Numeric,
+        Some(Some(_)) => return Err(fs_error(ERR_INVALID_SORT_OPTION)),
+    };
+
+    reject_symlink_components(Path::new(&path))?;
+    let metadata = match std::fs::metadata(&path) {
+        Ok(metadata) => metadata,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            return Err(fs_error(ERR_DIR_DOES_NOT_EXIST));
+        }
+        Err(err) => return Err(fs_io_error(err)),
+    };
+
+    if !metadata.is_dir() {
+        return Err(fs_error(ERR_NOT_A_DIR));
+    }
+
+    let mut entries = std::fs::read_dir(&path)
+        .map_err(fs_io_error)?
+        .map(|entry| {
+            let entry = entry.map_err(fs_io_error)?;
+            let file_type = entry.file_type().map_err(fs_io_error)?;
+            if file_type.is_symlink() {
+                return Err(fs_error(ERR_SYMLINK_NOT_SUPPORTED));
+            }
+
+            let name = entry
+                .file_name()
+                .into_string()
+                .map_err(|_| {
+                    LuaError::RuntimeError("directory entry name is not valid UTF-8".to_string())
+                })?;
+            let kind = if file_type.is_dir() {
+                "directory"
+            } else {
+                "file"
+            };
+            Ok((name, kind))
+        })
+        .collect::<LuaResult<Vec<_>>>()?;
+
+    entries.sort_by(|(name_a, _), (name_b, _)| match sort {
+        ReadDirSort::Alphabetic => name_a.cmp(name_b),
+        ReadDirSort::Numeric => natural_cmp(name_a, name_b),
+    });
+
+    let result = lua.create_table()?;
+    for (index, (name, kind)) in entries.into_iter().enumerate() {
+        let entry = lua.create_table()?;
+        entry.set("kind", kind)?;
+        entry.set("name", name)?;
+        result.set(index + 1, entry)?;
+    }
+    Ok(result)
+}
+
+fn fs_create_file(_: &Lua, path: String) -> LuaResult<()> {
+    reject_symlink_components(Path::new(&path))?;
+
+    match std::fs::symlink_metadata(&path) {
+        Ok(metadata) => {
+            if metadata.file_type().is_symlink() {
+                return Err(fs_error(ERR_SYMLINK_NOT_SUPPORTED));
+            }
+            return if metadata.is_file() {
+                Ok(())
+            } else {
+                Err(fs_error(ERR_NOT_A_FILE))
+            };
+        }
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+        Err(err) => return Err(fs_io_error(err)),
+    }
+
+    match std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&path)
+    {
+        Ok(_) => Ok(()),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            Err(fs_error(ERR_DIR_DOES_NOT_EXIST))
+        }
+        Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => {
+            let metadata = std::fs::symlink_metadata(&path).map_err(fs_io_error)?;
+            if metadata.file_type().is_symlink() {
+                Err(fs_error(ERR_SYMLINK_NOT_SUPPORTED))
+            } else if metadata.is_file() {
+                Ok(())
+            } else {
+                Err(fs_error(ERR_NOT_A_FILE))
+            }
+        }
+        Err(err) => Err(fs_io_error(err)),
+    }
+}
+
+struct CreateDirOptions {
+    create_parents: bool,
+}
+
+fn fs_create_dir(_: &Lua, (path, options): (String, Option<LuaTable>)) -> LuaResult<()> {
+    let options = options
+        .map(|options| {
+            Ok::<CreateDirOptions, LuaError>(CreateDirOptions {
+                create_parents: options.get("create_parents")?.unwrap_or(false),
+            })
+        })
+        .transpose()?
+        .unwrap_or(CreateDirOptions {
+            create_parents: false,
+        });
+
+    reject_symlink_components(Path::new(&path))?;
+    match std::fs::symlink_metadata(&path) {
+        Ok(metadata) => {
+            if metadata.file_type().is_symlink() {
+                return Err(fs_error(ERR_SYMLINK_NOT_SUPPORTED));
+            }
+            return if metadata.is_dir() {
+                Ok(())
+            } else {
+                Err(fs_error(ERR_NOT_A_DIR))
+            };
+        }
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+        Err(err) => return Err(fs_io_error(err)),
+    }
+
+    let result = if options.create_parents {
+        std::fs::create_dir_all(&path)
+    } else {
+        std::fs::create_dir(&path)
+    };
+
+    match result {
+        Ok(()) => Ok(()),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            Err(fs_error(ERR_DIR_DOES_NOT_EXIST))
+        }
+        Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => {
+            let metadata = std::fs::symlink_metadata(&path).map_err(fs_io_error)?;
+            if metadata.file_type().is_symlink() {
+                Err(fs_error(ERR_SYMLINK_NOT_SUPPORTED))
+            } else if metadata.is_dir() {
+                Ok(())
+            } else {
+                Err(fs_error(ERR_NOT_A_DIR))
+            }
+        }
+        Err(err) => Err(fs_io_error(err)),
+    }
+}
+
+fn reject_symlink_components(path: &Path) -> LuaResult<()> {
+    let mut current = PathBuf::new();
+    let components = path.components().collect::<Vec<_>>();
+    let last_normal = components
+        .iter()
+        .rposition(|component| matches!(component, Component::Normal(_)));
+
+    for (index, component) in components.iter().enumerate() {
+        match component {
+            Component::Prefix(_) | Component::RootDir => current.push(component.as_os_str()),
+            Component::CurDir => continue,
+            Component::ParentDir => current.push(component.as_os_str()),
+            Component::Normal(name) => current.push(name),
+        }
+
+        match std::fs::symlink_metadata(&current) {
+            Ok(metadata) if metadata.file_type().is_symlink() => {
+                return Err(fs_error(ERR_SYMLINK_NOT_SUPPORTED));
+            }
+            Ok(metadata)
+                if !metadata.is_dir()
+                    && last_normal.is_some_and(|last_normal| index < last_normal) =>
+            {
+                return Err(fs_error(ERR_NOT_A_DIR));
+            }
+            Ok(_) => {}
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => break,
+            Err(err) => return Err(fs_io_error(err)),
+        }
+    }
+    Ok(())
+}
+
+fn fs_error(message: &str) -> LuaError {
+    LuaError::RuntimeError(message.to_string())
+}
+
+fn fs_io_error(err: std::io::Error) -> LuaError {
+    LuaError::RuntimeError(err.to_string())
+}
+
+fn natural_cmp(a: &str, b: &str) -> std::cmp::Ordering {
+    use std::cmp::Ordering;
+
+    let mut a_rest = a;
+    let mut b_rest = b;
+    while !a_rest.is_empty() && !b_rest.is_empty() {
+        let a_first = a_rest.chars().next().unwrap();
+        let b_first = b_rest.chars().next().unwrap();
+        let a_is_digit = a_first.is_ascii_digit();
+        let b_is_digit = b_first.is_ascii_digit();
+
+        if a_is_digit && b_is_digit {
+            let a_len = a_rest.bytes().take_while(u8::is_ascii_digit).count();
+            let b_len = b_rest.bytes().take_while(u8::is_ascii_digit).count();
+            let a_digits = &a_rest[..a_len];
+            let b_digits = &b_rest[..b_len];
+            let a_significant = a_digits.trim_start_matches('0');
+            let b_significant = b_digits.trim_start_matches('0');
+            let ordering = a_significant
+                .len()
+                .cmp(&b_significant.len())
+                .then_with(|| a_significant.cmp(b_significant))
+                .then_with(|| a_digits.len().cmp(&b_digits.len()));
+            if ordering != Ordering::Equal {
+                return ordering;
+            }
+            a_rest = &a_rest[a_len..];
+            b_rest = &b_rest[b_len..];
+        } else {
+            let ordering = a_first.cmp(&b_first);
+            if ordering != Ordering::Equal {
+                return ordering;
+            }
+            a_rest = &a_rest[a_first.len_utf8()..];
+            b_rest = &b_rest[b_first.len_utf8()..];
+        }
+    }
+    a_rest.len().cmp(&b_rest.len())
 }
 
 fn copy_lua_table(

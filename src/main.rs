@@ -98,6 +98,7 @@ fn main() {
         .set("EMPTY_ARRAY", empty_array_marker())
         .unwrap();
     lua.globals().set("JSON_NULL", LuaValue::NULL).unwrap();
+    lua.globals().set("fs", fs_module(&lua).unwrap()).unwrap();
 
     add_func(&lua, "expect_equal", expect_equal(ctx.clone()));
     add_func(&lua, "expect_match", expect_match(ctx.clone()));
