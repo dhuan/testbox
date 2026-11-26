@@ -51,6 +51,10 @@ fi
 
 export TEST_TMP_FILE=$(mktemp)
 export TEST_TMP_DIR=$(mktemp -d)
+touch "${TEST_TMP_DIR}/some_file"
+touch "${TEST_TMP_DIR}/another_file"
+mkdir "${TEST_TMP_DIR}/some_dir"
+mkdir "${TEST_TMP_DIR}/another_dir"
 export TEST_TMP_FILE_CONTENT="Hello, world."
 printf "%s" "${TEST_TMP_FILE_CONTENT}" > "${TEST_TMP_FILE}"
 
