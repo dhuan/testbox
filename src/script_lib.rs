@@ -1008,10 +1008,40 @@ const ERR_SYMLINK_NOT_SUPPORTED: &str = "ERR_SYMLINK_NOT_SUPPORTED";
 
 pub fn fs_module(lua: &Lua) -> LuaResult<LuaTable> {
     let fs = lua.create_table()?;
-    fs.set("read_to_string", lua.create_function(fs_read_to_string)?)?;
-    fs.set("read_dir", lua.create_function(fs_read_dir)?)?;
-    fs.set("create_file", lua.create_function(fs_create_file)?)?;
-    fs.set("create_dir", lua.create_function(fs_create_dir)?)?;
+    let wrap_function: LuaFunction = lua
+        .load(
+            r#"
+            return function(native_function)
+                return function(...)
+                    local ok, result = pcall(native_function, ...)
+                    if not ok then
+                        local message = tostring(result)
+                        local runtime_message = message:match("^runtime error: ([^\n]+)")
+                        error(runtime_message or message, 0)
+                    end
+                    return result
+                end
+            end
+            "#,
+        )
+        .eval()?;
+
+    fs.set(
+        "read_to_string",
+        wrap_function.call::<LuaFunction>(lua.create_function(fs_read_to_string)?)?,
+    )?;
+    fs.set(
+        "read_dir",
+        wrap_function.call::<LuaFunction>(lua.create_function(fs_read_dir)?)?,
+    )?;
+    fs.set(
+        "create_file",
+        wrap_function.call::<LuaFunction>(lua.create_function(fs_create_file)?)?,
+    )?;
+    fs.set(
+        "create_dir",
+        wrap_function.call::<LuaFunction>(lua.create_function(fs_create_dir)?)?,
+    )?;
     Ok(fs)
 }
 
