@@ -9,7 +9,8 @@ test("read file successfully", function()
 end)
 
 test("error: file does not exist", function()
-    local ok, result = pcall(fs.read_to_string, "unexisting_file")
-    expect_equal(ok, false)
-    expect_equal(result, "ERR_FILE_DOES_NOT_EXIST")
+    expect_equal(
+        table.pack(pcall(fs.read_to_string, "unexisting_file")),
+        {false, "ERR_FILE_DOES_NOT_EXIST"}
+    )
 end)
