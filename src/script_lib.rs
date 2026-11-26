@@ -1039,7 +1039,7 @@ enum ReadDirSort {
     Numeric,
 }
 
-fn fs_read_dir(_: &Lua, (path, options): (String, Option<LuaTable>)) -> LuaResult<LuaTable> {
+fn fs_read_dir(lua: &Lua, (path, options): (String, Option<LuaTable>)) -> LuaResult<LuaTable> {
     let sort = match options
         .map(|options| options.get::<Option<String>>("sort"))
         .transpose()?
@@ -1151,7 +1151,7 @@ fn fs_create_dir(_: &Lua, (path, options): (String, Option<LuaTable>)) -> LuaRes
     let options = options
         .map(|options| {
             Ok::<CreateDirOptions, LuaError>(CreateDirOptions {
-                create_parents: options.get("create_parents")?.unwrap_or(false),
+                create_parents: options.get::<Option<bool>>("create_parents")?.unwrap_or(false),
             })
         })
         .transpose()?
