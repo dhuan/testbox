@@ -50,6 +50,7 @@ then
 fi
 
 export TEST_TMP_FILE=$(mktemp)
+export TEST_TMP_DIR=$(mktemp -d)
 export TEST_TMP_FILE_CONTENT="Hello, world."
 printf "%s" "${TEST_TMP_FILE_CONTENT}" > "${TEST_TMP_FILE}"
 
