@@ -4,5 +4,6 @@
 END EXPECTED OUTPUT --]]
 
 test("aew", function()
+    error("ahuahuahauah")
 end)
 

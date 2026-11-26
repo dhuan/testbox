@@ -36,7 +36,13 @@ fi
 
 OUTPUT_STDERR=$(mktemp)
 
-ls test/*.lua | while read TEST_FILE
+TEST_FILES="$(ls test/*.lua)"
+if [ -n "${TEST_FILE}" ]
+then
+    TEST_FILES="$(printf "%s" "${TEST_FILES}" | grep "${TEST_FILE}" | awk '1')"
+fi
+
+printf "%s" "${TEST_FILES}" | awk '1' | while read -r TEST_FILE
 do
     echo $TEST_FILE
 
