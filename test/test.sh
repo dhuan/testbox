@@ -49,6 +49,10 @@ then
     exit 0
 fi
 
+export TEST_TMP_FILE=$(mktemp)
+export TEST_TMP_FILE_CONTENT="Hello, world."
+printf "%s" "${TEST_TMP_FILE_CONTENT}" > "${TEST_TMP_FILE}"
+
 printf "%s\n" "${TEST_FILES}" | while read -r TEST_FILE
 do
     echo $TEST_FILE
