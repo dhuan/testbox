@@ -2,6 +2,7 @@
 📁 fs_read_dir.lua
 ✅ Read a directory successfully
 ✅ Error: directory does not exist
+✅ Error: not a directory
 END EXPECTED OUTPUT --]]
 
 test("Read a directory successfully", function()
@@ -17,5 +18,12 @@ test("Error: directory does not exist", function()
     expect_equal(
         table.pack(pcall(fs.read_dir, "unexisting_dir")),
         {false, "ERR_DIR_DOES_NOT_EXIST"}
+    )
+end)
+
+test("Error: not a directory", function()
+    expect_equal(
+        table.pack(pcall(fs.read_dir, os.getenv("TEST_TMP_FILE"))),
+        {false, "ERR_NOT_A_DIR"}
     )
 end)
