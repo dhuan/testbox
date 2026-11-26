@@ -42,7 +42,14 @@ then
     TEST_FILES="$(printf "%s" "${TEST_FILES}" | grep "${TEST_FILE}" | awk '1')"
 fi
 
-printf "%s" "${TEST_FILES}" | awk '1' | while read -r TEST_FILE
+if [ -z "${TEST_FILES}" ]
+then
+    echo "No test files found. Aborting."
+
+    exit 0
+fi
+
+printf "%s\n" "${TEST_FILES}" | while read -r TEST_FILE
 do
     echo $TEST_FILE
 
