@@ -49,6 +49,21 @@ then
     exit 0
 fi
 
+export TESTBOX_TEST_TMP_DIR="$(pwd)/test/tmp"
+export TEST_TMP_FILE=$(mktemp)
+export TEST_TMP_DIR=$(mktemp -d)
+touch "${TEST_TMP_DIR}/some_file"
+touch "${TEST_TMP_DIR}/another_file"
+mkdir "${TEST_TMP_DIR}/some_dir"
+mkdir "${TEST_TMP_DIR}/another_dir"
+mkdir "${TEST_TMP_DIR}/dir_with_files"
+(
+    cd "${TEST_TMP_DIR}/dir_with_files"
+    touch file1 file5 file10 file15 file100 file250
+)
+export TEST_TMP_FILE_CONTENT="Hello, world."
+printf "%s" "${TEST_TMP_FILE_CONTENT}" > "${TEST_TMP_FILE}"
+
 printf "%s\n" "${TEST_FILES}" | while read -r TEST_FILE
 do
     echo $TEST_FILE

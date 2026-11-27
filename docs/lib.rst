@@ -107,6 +107,82 @@ The returned object includes the response status, response body text, decoded
 JSON when the response body contains JSON, and response headers.
 
 
+fs
+==
+
+Provides basic filesystem operations. Relative paths are resolved from the
+process's current working directory. Symlinks are not supported: operations on
+symlink paths, and directory listings that contain symlinks, fail with
+``ERR_SYMLINK_NOT_SUPPORTED``.
+
+fs.read_to_string
+-----------------
+
+Reads a UTF-8 text file. It throws ``ERR_FILE_DOES_NOT_EXIST`` if the file
+does not exist and ``ERR_NOT_A_FILE`` if the path is not a file.
+
+.. code::
+
+    local ok, content = pcall(fs.read_to_string, "some/file.txt")
+    if not ok and content == "ERR_FILE_DOES_NOT_EXIST" then
+        print("The file is missing")
+    end
+
+
+fs.read_dir
+-----------
+
+Returns the immediate entries in a directory as an array of tables with
+``kind`` (``"directory"`` or ``"file"``) and ``name`` fields. It throws
+``ERR_DIR_DOES_NOT_EXIST`` if the directory does not exist and ``ERR_NOT_A_DIR``
+if the path is not a directory.
+
+.. code::
+
+    local entries = fs.read_dir("some/path", { sort = "numeric" })
+
+Entries are sorted by name alphabetically by default. Set ``sort`` to
+``"numeric"`` for natural sorting, which compares digit runs by numeric value
+(so ``file2`` comes before ``file10``), or ``"alphabetic"`` to select the
+default explicitly. An unsupported sort value throws
+``ERR_INVALID_SORT_OPTION``.
+
+
+fs.create_file
+--------------
+
+Creates a file, optionally writing the supplied string as its contents. If a
+file already exists, the call succeeds without changing its contents. A
+missing parent directory throws ``ERR_DIR_DOES_NOT_EXIST``; a target that is
+not a file throws ``ERR_NOT_A_FILE``. A parent path component that is not a
+directory throws ``ERR_NOT_A_DIR``.
+
+.. code::
+
+    fs.create_file("some/file.txt")
+    fs.create_file("some/file.txt", "Hello, world!")
+
+
+fs.create_dir
+-------------
+
+Creates a directory and succeeds if the directory already exists. By default,
+missing parent directories are not created; pass ``{ create_parents = true }``
+to create them. A missing parent throws ``ERR_DIR_DOES_NOT_EXIST``, and a path
+that is not a directory throws ``ERR_NOT_A_DIR``.
+
+.. code::
+
+    fs.create_dir("some/dir", { create_parents = true })
+
+
+Errors
+------
+
+The named error codes are plain strings returned by ``pcall``. Other filesystem
+errors are reported with their operating-system error message.
+
+
 expect_equal
 ============
 
