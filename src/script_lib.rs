@@ -1132,7 +1132,7 @@ fn fs_read_dir(lua: &Lua, (path, options): (String, Option<LuaTable>)) -> LuaRes
     Ok(result)
 }
 
-fn fs_create_file(_: &Lua, path: String) -> LuaResult<()> {
+fn fs_create_file(_: &Lua, (path, data): (String, Option<String>)) -> LuaResult<()> {
     reject_symlink_components(Path::new(&path))?;
 
     match std::fs::symlink_metadata(&path) {
@@ -1155,7 +1155,12 @@ fn fs_create_file(_: &Lua, path: String) -> LuaResult<()> {
         .create_new(true)
         .open(&path)
     {
-        Ok(_) => Ok(()),
+        Ok(mut file) => {
+            if let Some(data) = data {
+                file.write_all(data.as_bytes()).map_err(fs_io_error)?;
+            }
+            Ok(())
+        }
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
             Err(fs_error(ERR_DIR_DOES_NOT_EXIST))
         }

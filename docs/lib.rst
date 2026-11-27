@@ -151,14 +151,16 @@ default explicitly. An unsupported sort value throws
 fs.create_file
 --------------
 
-Creates an empty file. If a file already exists, it succeeds without changing
-its contents. A missing parent directory throws ``ERR_DIR_DOES_NOT_EXIST``; a
-target that is not a file throws ``ERR_NOT_A_FILE``. A parent path component
-that is not a directory throws ``ERR_NOT_A_DIR``.
+Creates a file, optionally writing the supplied string as its contents. If a
+file already exists, the call succeeds without changing its contents. A
+missing parent directory throws ``ERR_DIR_DOES_NOT_EXIST``; a target that is
+not a file throws ``ERR_NOT_A_FILE``. A parent path component that is not a
+directory throws ``ERR_NOT_A_DIR``.
 
 .. code::
 
     fs.create_file("some/file.txt")
+    fs.create_file("some/file.txt", "Hello, world!")
 
 
 fs.create_dir
