@@ -49,6 +49,7 @@ then
     exit 0
 fi
 
+export TESTBOX_TEST_TMP_DIR="$(pwd)/test/tmp"
 export TEST_TMP_FILE=$(mktemp)
 export TEST_TMP_DIR=$(mktemp -d)
 touch "${TEST_TMP_DIR}/some_file"
