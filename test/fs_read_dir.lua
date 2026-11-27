@@ -3,6 +3,7 @@
 ✅ Read a directory successfully
 ✅ Error: directory does not exist
 ✅ Error: not a directory
+✅ Error: invalid sort option
 END EXPECTED OUTPUT --]]
 
 test("Read a directory successfully", function()
@@ -25,5 +26,12 @@ test("Error: not a directory", function()
     expect_equal(
         table.pack(pcall(fs.read_dir, os.getenv("TEST_TMP_FILE"))),
         {false, "ERR_NOT_A_DIR"}
+    )
+end)
+
+test("Error: invalid sort option", function()
+    expect_equal(
+        table.pack(pcall(fs.read_dir, os.getenv("TEST_TMP_DIR"), { sort = "invalid" })),
+        {false, "ERR_INVALID_SORT_OPTION"}
     )
 end)
